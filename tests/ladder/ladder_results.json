@@ -1,0 +1,382 @@
+{
+  "S1": {
+    "cost_time": {
+      "completion_tokens": {
+        "max": 20.0,
+        "n": 6,
+        "p50": 20.0,
+        "p90": 20.0,
+        "p95": 20.0,
+        "sum": 120.0
+      },
+      "hold_duration_ms": {
+        "max": 27.84579200670123,
+        "n": 3,
+        "p50": 0.6005829782225192,
+        "p90": 22.39675020100549,
+        "p95": 25.121271103853356,
+        "sum": 28.984415985178202
+      },
+      "prompt_tokens": {
+        "max": 10.0,
+        "n": 6,
+        "p50": 10.0,
+        "p90": 10.0,
+        "p95": 10.0,
+        "sum": 60.0
+      },
+      "vote_latency_ms": {
+        "max": 4.379833000712097,
+        "n": 6,
+        "p50": 3.013854002347216,
+        "p90": 4.151270986767486,
+        "p95": 4.265551993739791,
+        "sum": 18.10099999420345
+      }
+    },
+    "divergence": {
+      "comparable": 1,
+      "disagree": 0,
+      "disagree_rate": 0.0
+    },
+    "path_counts": {
+      "covered": 2,
+      "quorum": 1,
+      "quorum_deny": 1
+    },
+    "paths": [
+      "quorum",
+      "quorum_deny",
+      "covered",
+      "covered"
+    ],
+    "stop_divergence": false,
+    "stop_latency": false
+  },
+  "S2": {
+    "apply_after_trial_path": "quorum",
+    "cost_time": {
+      "completion_tokens": {
+        "max": 20.0,
+        "n": 9,
+        "p50": 20.0,
+        "p90": 20.0,
+        "p95": 20.0,
+        "sum": 180.0
+      },
+      "hold_duration_ms": {
+        "max": 7.851457979995757,
+        "n": 4,
+        "p50": 6.037811981514096,
+        "p90": 7.390982884680852,
+        "p95": 7.621220432338305,
+        "sum": 20.147123956121504
+      },
+      "prompt_tokens": {
+        "max": 10.0,
+        "n": 9,
+        "p50": 10.0,
+        "p90": 10.0,
+        "p95": 10.0,
+        "sum": 90.0
+      },
+      "vote_latency_ms": {
+        "max": 3.763625049032271,
+        "n": 9,
+        "p50": 2.230832993518561,
+        "p90": 3.495125030167401,
+        "p95": 3.629375039599836,
+        "sum": 22.01533311745152
+      }
+    },
+    "denied_without_trial": true,
+    "inexpressible": [
+      {
+        "blocker": "CI status is outside the arbiter ledger (network/clock)",
+        "id": "external_ci_green",
+        "wanted": "allow deploy only if CI pipeline is green"
+      },
+      {
+        "blocker": "requires live wall clock, not event timestamps alone",
+        "id": "wall_clock_business_hours",
+        "wanted": "allow writes only during business hours"
+      }
+    ],
+    "other_path": "quorum",
+    "precondition_denied_count": 1,
+    "quorum_count": 3,
+    "share_expressed_as_precondition": 0.25,
+    "trial_path": "quorum"
+  },
+  "S3": {
+    "binary_only_options": [
+      "allow",
+      "deny"
+    ],
+    "cost_time": {
+      "completion_tokens": {
+        "max": 20.0,
+        "n": 6,
+        "p50": 20.0,
+        "p90": 20.0,
+        "p95": 20.0,
+        "sum": 120.0
+      },
+      "hold_duration_ms": {
+        "max": 8.362291031517088,
+        "n": 2,
+        "p50": 7.237083016661927,
+        "p90": 8.137249428546056,
+        "p95": 8.249770230031572,
+        "sum": 14.474166033323854
+      },
+      "prompt_tokens": {
+        "max": 10.0,
+        "n": 6,
+        "p50": 10.0,
+        "p90": 10.0,
+        "p95": 10.0,
+        "sum": 60.0
+      },
+      "vote_latency_ms": {
+        "max": 3.9894580258987844,
+        "n": 6,
+        "p50": 2.8867920045740902,
+        "p90": 3.800645499723032,
+        "p95": 3.8950517628109083,
+        "sum": 17.06429204205051
+      }
+    },
+    "followup_needed_new_decision": true,
+    "followup_path": "quorum",
+    "narrow_approved": true,
+    "narrow_options": [
+      "allow",
+      "deny",
+      "allow_narrow:ttl=60",
+      "allow_narrow:ttl=300;paths=src/**",
+      "allow_narrow:ttl=300;paths=src/a.py",
+      "allow_narrow:ttl=120;args=path"
+    ],
+    "narrow_path": "quorum",
+    "narrow_replaced_deny": true,
+    "narrow_verdict": "allow_narrow"
+  },
+  "S4": {
+    "cost_increased": true,
+    "recommend_cut": true,
+    "replay_uses_stored": true,
+    "same_verdict": true,
+    "with_probes": {
+      "chosen_option": "allow",
+      "cost_time": {
+        "completion_tokens": {
+          "max": 20.0,
+          "n": 3,
+          "p50": 20.0,
+          "p90": 20.0,
+          "p95": 20.0,
+          "sum": 60.0
+        },
+        "hold_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "sum": 0.0
+        },
+        "prompt_tokens": {
+          "max": 10.0,
+          "n": 3,
+          "p50": 10.0,
+          "p90": 10.0,
+          "p95": 10.0,
+          "sum": 30.0
+        },
+        "vote_latency_ms": {
+          "max": 4.092333954758942,
+          "n": 3,
+          "p50": 1.8882909789681435,
+          "p90": 3.6515253596007824,
+          "p95": 3.8719296571798623,
+          "sum": 7.525999913923442
+        }
+      },
+      "executions": 2,
+      "probes": 2,
+      "prompt_hashes": [
+        "6a76507e5f65647025585049caf76f789986a5edfff5dc1e41bacd2118da8b2c",
+        "c521b5ae69919878c4dfc00aa009f8a09472cb1ec3bbecdb53168171185164d9",
+        "2d2eee3b3fa9b5fcfdc947e8ce1ff497f6b88021b67c98ffbd05bf45f2fc68c4"
+      ],
+      "verdict": "allow"
+    },
+    "without_probes": {
+      "chosen_option": "allow",
+      "cost_time": {
+        "completion_tokens": {
+          "max": 20.0,
+          "n": 3,
+          "p50": 20.0,
+          "p90": 20.0,
+          "p95": 20.0,
+          "sum": 60.0
+        },
+        "hold_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p90": null,
+          "p95": null,
+          "sum": 0.0
+        },
+        "prompt_tokens": {
+          "max": 10.0,
+          "n": 3,
+          "p50": 10.0,
+          "p90": 10.0,
+          "p95": 10.0,
+          "sum": 30.0
+        },
+        "vote_latency_ms": {
+          "max": 4.592792014591396,
+          "n": 3,
+          "p50": 4.084292042534798,
+          "p90": 4.491092020180076,
+          "p95": 4.541942017385736,
+          "sum": 12.27829308481887
+        }
+      },
+      "executions": 0,
+      "probes": 0,
+      "prompt_hashes": [
+        "6a76507e5f65647025585049caf76f789986a5edfff5dc1e41bacd2118da8b2c",
+        "6a76507e5f65647025585049caf76f789986a5edfff5dc1e41bacd2118da8b2c",
+        "6a76507e5f65647025585049caf76f789986a5edfff5dc1e41bacd2118da8b2c"
+      ],
+      "verdict": "allow"
+    }
+  },
+  "S5": {
+    "cascade_count": 3,
+    "cascade_ids": [
+      "d-01KZSBB98B5MTTJRF6XCQK5VJR",
+      "d-01KZSBB98N7TTFPV0ZWHVRD03J",
+      "d-01KZSBB98VF3106AGKMQCEF8E1"
+    ],
+    "cascade_surprised_coverage": true,
+    "cost_time": {
+      "completion_tokens": {
+        "max": 20.0,
+        "n": 6,
+        "p50": 20.0,
+        "p90": 20.0,
+        "p95": 20.0,
+        "sum": 120.0
+      },
+      "hold_duration_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p90": null,
+        "p95": null,
+        "sum": 0.0
+      },
+      "prompt_tokens": {
+        "max": 10.0,
+        "n": 6,
+        "p50": 10.0,
+        "p90": 10.0,
+        "p95": 10.0,
+        "sum": 60.0
+      },
+      "vote_latency_ms": {
+        "max": 5.239291989710182,
+        "n": 6,
+        "p50": 3.699708526255563,
+        "p90": 5.040021002059802,
+        "p95": 5.139656495884992,
+        "sum": 22.216500074137002
+      }
+    },
+    "cycle_err": null,
+    "cycle_refused": true,
+    "dependency_share": 0.75,
+    "opens": 4,
+    "with_dependencies": 3
+  },
+  "S6": {
+    "calls_by_rule": 1,
+    "calls_fresh_quorum": 2,
+    "calls_rule_denied": 1,
+    "cost_time": {
+      "completion_tokens": {
+        "max": 20.0,
+        "n": 9,
+        "p50": 20.0,
+        "p90": 20.0,
+        "p95": 20.0,
+        "sum": 180.0
+      },
+      "hold_duration_ms": {
+        "max": 6.112792005296797,
+        "n": 4,
+        "p50": 3.1658335065003484,
+        "p90": 6.099417107179761,
+        "p95": 6.106104556238279,
+        "sum": 12.666459020692855
+      },
+      "prompt_tokens": {
+        "max": 10.0,
+        "n": 9,
+        "p50": 10.0,
+        "p90": 10.0,
+        "p95": 10.0,
+        "sum": 90.0
+      },
+      "vote_latency_ms": {
+        "max": 3.839084005448967,
+        "n": 9,
+        "p50": 2.24116601748392,
+        "p90": 3.575684002134949,
+        "p95": 3.707384003791958,
+        "sum": 22.782042040489614
+      }
+    },
+    "escalate_approved": false,
+    "escalate_is_pass": false,
+    "escalate_path": "quorum",
+    "rule_allow_with_test": true,
+    "rule_deny_without_test": true,
+    "rule_vs_quorum_ratio": 0.5
+  },
+  "ceiling": {
+    "last_held": "S6",
+    "note": "Offline corpus: no stop threshold tripped; S4 cut (no verdict gain, cost up)",
+    "s4_product_recommendation": "cut",
+    "stop_triggered": null
+  },
+  "prediction": {
+    "S2": "cheap_durable",
+    "S3": "cheap_durable",
+    "S4": "expensive_marginal",
+    "S5": "cheap_durable",
+    "S6": "highest_value_least_model_dependent"
+  },
+  "recommendation": {
+    "cut": [
+      "S4"
+    ],
+    "stay": [
+      "S2",
+      "S3",
+      "S5",
+      "S6"
+    ]
+  },
+  "stop_thresholds": {
+    "disagree_rate_max": 0.33,
+    "hold_duration_p95_ms_max": 25000
+  }
+}

@@ -1,0 +1,1 @@
+"""Hexagonal adapters (inbound / outbound)."""

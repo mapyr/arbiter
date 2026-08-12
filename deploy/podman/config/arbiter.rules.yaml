@@ -1,0 +1,15 @@
+critical:
+  paths:
+    - "**"
+default: critical
+
+formulation:
+  deny_universal_scope: true
+  deny_filler_options: true
+
+# OpenCode plugin asks get_gate_policy via Hangar → this arbiter.
+# plan.mode: on_uncovered | session
+client_gate:
+  plan:
+    mode: on_uncovered
+    arbiter_mcp_server: arbiter

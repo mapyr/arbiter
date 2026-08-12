@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Optional local shortcut for layer 3. CI re-runs the same check and is authoritative.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+if ! command -v arbiter >/dev/null 2>&1; then
+  echo "arbiter CLI not on PATH; install the package or skip local hook" >&2
+  exit 1
+fi
+# Message not available pre-commit; require decision via env for local convenience,
+# or rely on CI. Prefer: ARBITER_DECISION_ID=... git commit
+MSG_FILE="$(mktemp)"
+trap 'rm -f "$MSG_FILE"' EXIT
+if [[ -n "${ARBITER_DECISION_ID:-}" ]]; then
+  printf 'Arbiter-Decision: %s\n' "$ARBITER_DECISION_ID" >"$MSG_FILE"
+else
+  : >"$MSG_FILE"
+fi
+arbiter verify-commit --paths-from staged --message-file "$MSG_FILE"

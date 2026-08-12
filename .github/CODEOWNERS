@@ -1,0 +1,4 @@
+# Domain changes require explicit review — pure hexagonal core.
+/arbiter/domain/ @mapyr
+/scripts/check_hexagon_boundaries.py @mapyr
+/scripts/check_domain_coverage.py @mapyr

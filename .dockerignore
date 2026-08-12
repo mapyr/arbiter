@@ -1,0 +1,16 @@
+.venv
+venv
+.git
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.coverage
+coverage*.json
+htmlcov
+dist
+build
+*.egg-info
+decisions
+deploy/podman/.env
+/tmp
+note.txt

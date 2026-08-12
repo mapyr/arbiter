@@ -1,0 +1,78 @@
+// Layer 1 — declarative OpenCode permissions (copy into project opencode.json).
+// OpenCode 1.18.x permission keys. Comments document which TASK-ARBITER-05 rule
+// each block enforces. JSONC is for humans; strip comments or merge into JSON.
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    // Default: ask humans for anything not explicitly allowed.
+    "*": "ask",
+
+    // Read-only exploration stays cheap.
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+
+    // Shell allow-list — only patterns that are actually needed day-to-day.
+    // Everything else asks (or deny via trailing "*").
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git branch*": "allow",
+      "pytest *": "allow",
+      "python *": "ask",
+      "rm *": "deny",
+      "sudo *": "deny"
+    },
+
+    // Primary may edit inside the worktree; layer 2 still asks arbiter.
+    "edit": {
+      "*": "ask"
+    },
+
+    // One writer per directory: refuse tools that leave the project root.
+    "external_directory": {
+      "*": "deny"
+    },
+
+    // Subagents: no write, no shell, no leaving the tree (layer 1).
+    "task": {
+      "*": "ask",
+      "general": "ask",
+      "explore": "allow",
+      "scout": "allow"
+    }
+  },
+  "agent": {
+    "explore": {
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "external_directory": { "*": "deny" },
+        "task": "deny"
+      }
+    },
+    "scout": {
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "external_directory": { "*": "deny" },
+        "task": "deny"
+      }
+    },
+    "general": {
+      "mode": "subagent",
+      "permission": {
+        // Helper agents: no write, no shell — research / parallel work only.
+        "edit": "deny",
+        "bash": "deny",
+        "external_directory": { "*": "deny" },
+        "task": "deny"
+      }
+    }
+  }
+}

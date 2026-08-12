@@ -1,0 +1,23 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+dist/
+build/
+decisions/*
+!decisions/README.md
+# Local working copies at repo root only (deploy/podman/config/* is tracked).
+/arbiter.rules.yaml
+/arbiter.voters.yaml
+/arbiter.intercept.yaml
+.coverage
+.coverage.*
+coverage.json
+coverage*.json
+htmlcov/
+deploy/podman/.env
+# local scratch / private notes
+note.txt

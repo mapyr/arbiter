@@ -1,0 +1,233 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  boundaries:
+    name: hexagon boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Enforce domain/application import rules
+        run: python scripts/check_hexagon_boundaries.py
+
+  domain-gate:
+    name: domain gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            domain:
+              - 'arbiter/domain/**'
+              - 'scripts/check_hexagon_boundaries.py'
+              - 'scripts/check_domain_coverage.py'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install into a fresh venv
+        run: |
+          python -m venv "$RUNNER_TEMP/arbiter-venv"
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install -U pip
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install --no-cache-dir ".[dev]"
+
+      - name: Choose domain coverage threshold
+        id: thr
+        run: |
+          if [[ "${{ steps.filter.outputs.domain }}" == "true" ]]; then
+            echo "fail_under=90" >> "$GITHUB_OUTPUT"
+            echo "Domain paths changed → strict fail-under=90"
+          else
+            echo "fail_under=85" >> "$GITHUB_OUTPUT"
+            echo "No domain path changes → fail-under=85"
+          fi
+
+      - name: Domain coverage from unit suite
+        run: |
+          STAGE="$RUNNER_TEMP/arbiter-domain"
+          mkdir -p "$STAGE"
+          cp -R tests "$STAGE/tests"
+          cp arbiter.rules.yaml.example "$STAGE/"
+          cp -R scripts "$STAGE/scripts"
+          cd "$STAGE"
+          "$RUNNER_TEMP/arbiter-venv/bin/pytest" tests -q --tb=short \
+            -m "not integration" \
+            --cov=arbiter.domain \
+            --cov-report=term-missing \
+            --cov-report=json:coverage-domain.json
+          "$RUNNER_TEMP/arbiter-venv/bin/python" scripts/check_domain_coverage.py \
+            --coverage-json coverage-domain.json \
+            --fail-under "${{ steps.thr.outputs.fail_under }}"
+
+  unit:
+    name: unit (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install into a fresh venv
+        run: |
+          python -m venv "$RUNNER_TEMP/arbiter-venv"
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install -U pip
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install --no-cache-dir ".[dev]"
+
+      - name: Confirm import origin is site-packages
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/arbiter-venv/bin/python" - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          origin = Path(importlib.util.find_spec("arbiter").origin).resolve()
+          print("arbiter origin:", origin)
+          assert "site-packages" in origin.parts, origin
+          PY
+
+      - name: Unit tests (installed package)
+        run: |
+          STAGE="$RUNNER_TEMP/arbiter-tests"
+          mkdir -p "$STAGE"
+          cp -R tests "$STAGE/tests"
+          cp arbiter.rules.yaml.example "$STAGE/"
+          cp -R scripts "$STAGE/scripts"
+          cd "$STAGE"
+          "$RUNNER_TEMP/arbiter-venv/bin/python" - <<'PY'
+          import importlib.metadata
+          from pathlib import Path
+          import importlib.util
+          origin = Path(importlib.util.find_spec("arbiter").origin).resolve()
+          assert "site-packages" in origin.parts, origin
+          from arbiter.server import package_name, package_version
+          assert package_name() == "arbiter"
+          assert package_version() == importlib.metadata.version("arbiter")
+          PY
+          "$RUNNER_TEMP/arbiter-venv/bin/pytest" tests -q --tb=short -m "not integration"
+
+  coverage:
+    name: coverage gate
+    runs-on: ubuntu-latest
+    needs: [boundaries, unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install into a fresh venv
+        run: |
+          python -m venv "$RUNNER_TEMP/arbiter-venv"
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install -U pip
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install --no-cache-dir ".[dev]"
+      - name: Full suite coverage (installed package)
+        run: |
+          STAGE="$RUNNER_TEMP/arbiter-cov"
+          mkdir -p "$STAGE"
+          cp -R tests "$STAGE/tests"
+          cp arbiter.rules.yaml.example "$STAGE/"
+          cp -R scripts "$STAGE/scripts"
+          cd "$STAGE"
+          "$RUNNER_TEMP/arbiter-venv/bin/pytest" tests -q --tb=short \
+            --cov=arbiter \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=json:coverage.json \
+            --cov-fail-under=80
+          "$RUNNER_TEMP/arbiter-venv/bin/python" scripts/check_domain_coverage.py \
+            --coverage-json coverage.json \
+            --fail-under 85
+
+  integration:
+    name: integration (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: [boundaries, unit]
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install into a fresh venv
+        run: |
+          python -m venv "$RUNNER_TEMP/arbiter-venv"
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install -U pip
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install --no-cache-dir ".[dev]"
+
+      - name: Integration tests (installed package)
+        run: |
+          STAGE="$RUNNER_TEMP/arbiter-tests"
+          mkdir -p "$STAGE"
+          cp -R tests "$STAGE/tests"
+          cp arbiter.rules.yaml.example "$STAGE/"
+          cd "$STAGE"
+          "$RUNNER_TEMP/arbiter-venv/bin/pytest" tests -q --tb=short -m integration
+
+  commit-gate:
+    name: layer-3 commit gate
+    runs-on: ubuntu-latest
+    needs: [boundaries, unit]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install arbiter
+        run: |
+          python -m venv "$RUNNER_TEMP/arbiter-venv"
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install -U pip
+          "$RUNNER_TEMP/arbiter-venv/bin/pip" install --no-cache-dir ".[dev]"
+
+      - name: Offline layer-3 commit-gate suite
+        run: |
+          STAGE="$RUNNER_TEMP/arbiter-l3"
+          mkdir -p "$STAGE"
+          cp -R tests "$STAGE/tests"
+          cp arbiter.rules.yaml.example "$STAGE/"
+          cd "$STAGE"
+          "$RUNNER_TEMP/arbiter-venv/bin/pytest" tests/test_stage5_coverage.py -q --tb=short -m "not integration"
+
+      - name: verify-commit against range (when ledger is present)
+        if: hashFiles('decisions/ledger.jsonl') != ''
+        env:
+          ARBITER_DATA_DIR: ${{ github.workspace }}/decisions
+          ARBITER_RULES_PATH: ${{ github.workspace }}/arbiter.rules.yaml.example
+          ARBITER_ALLOW_BREAK_GLASS: ${{ contains(github.event.pull_request.labels.*.name, 'allow-break-glass') && '1' || '0' }}
+        run: |
+          # Authoritative layer-3 check: query the ledger for allow + scope + expiry.
+          # Break-glass requires PR label allow-break-glass (human ack).
+          BASE="${{ github.event.pull_request.base.sha || 'origin/main' }}"
+          git fetch origin main 2>/dev/null || true
+          MSG="$(git log -1 --format=%B)"
+          "$RUNNER_TEMP/arbiter-venv/bin/arbiter" verify-commit \
+            --paths-from range \
+            --base "$BASE" \
+            --message "$MSG" \
+            --json

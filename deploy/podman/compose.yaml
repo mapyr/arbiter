@@ -1,0 +1,112 @@
+# Podman stack: Hangar (docker) + Arbiter (discovered via mcp.hangar labels).
+#
+#   ./deploy/podman/up.sh
+#   podman compose -f deploy/podman/compose.yaml down
+#
+# Important: do NOT publish arbiter's port. Hangar discovery prefers host
+# bindings and would resolve 127.0.0.1 inside the Hangar container.
+
+name: arbiter
+
+services:
+  arbiter:
+    build:
+      context: ../..
+      dockerfile: deploy/podman/Containerfile.arbiter
+    image: localhost/arbiter:0.6.0
+    environment:
+      ARBITER_DATA_DIR: /data/decisions
+      ARBITER_RULES_PATH: /config/arbiter.rules.yaml
+      ARBITER_VOTERS_PATH: /config/arbiter.voters.yaml
+      ARBITER_HTTP_MCP_PATH: /
+      ARBITER_ALLOW_INSECURE_HTTP: "1"
+      # Voter keys unused in this process (quorum runs inside Hangar delivery),
+      # but kept for CLI tools that share the volume.
+      ARBITER_VOTER_1_KEY: ${ARBITER_VOTER_1_KEY:-}
+      ARBITER_VOTER_2_KEY: ${ARBITER_VOTER_2_KEY:-${ARBITER_VOTER_1_KEY:-}}
+      ARBITER_VOTER_3_KEY: ${ARBITER_VOTER_3_KEY:-${ARBITER_VOTER_1_KEY:-}}
+    volumes:
+      - decisions:/data/decisions
+      - ./config:/config:ro
+    networks:
+      - mcp-net
+    # Discovery labels (Hangar cookbook 10 — Docker/Podman).
+    labels:
+      mcp.hangar.enabled: "true"
+      mcp.hangar.name: "arbiter"
+      mcp.hangar.mode: "http"
+      mcp.hangar.port: "8765"
+      mcp.hangar.health-path: "/health"
+      mcp.hangar.group: "governance"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('127.0.0.1',8765),2); s.close()",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  hangar:
+    build:
+      context: ../..
+      dockerfile: deploy/podman/Containerfile.hangar
+    image: localhost/arbiter-hangar:2.6.0
+    # Rootless Podman: container "root" is still mapped; mount the *user* socket.
+    user: "0"
+    privileged: true
+    security_opt:
+      - label=disable
+    depends_on:
+      arbiter:
+        condition: service_started
+    ports:
+      - "${HANGAR_HOST_PORT:-18782}:8080"
+    environment:
+      MCP_CONFIG: /app/config.yaml
+      MCP_MODE: http
+      MCP_HTTP_HOST: "0.0.0.0"
+      MCP_HTTP_PORT: "8080"
+      DOCKER_HOST: unix:///var/run/docker.sock
+      ARBITER_HANGAR_PRINCIPAL_ID: service:arbiter
+      ARBITER_HANGAR_RESOLVE_TOKEN: ${ARBITER_HANGAR_RESOLVE_TOKEN:-}
+      ARBITER_VOTER_1_KEY: ${ARBITER_VOTER_1_KEY:-}
+      ARBITER_VOTER_2_KEY: ${ARBITER_VOTER_2_KEY:-${ARBITER_VOTER_1_KEY:-}}
+      ARBITER_VOTER_3_KEY: ${ARBITER_VOTER_3_KEY:-${ARBITER_VOTER_1_KEY:-}}
+    volumes:
+      - ./config/hangar.config.yaml:/app/config.yaml:ro
+      - ./config:/config:ro
+      - hangar-data:/app/data
+      - decisions:/data/decisions
+      # Must be the rootless user socket inside the Podman machine
+      # (e.g. /run/user/502/podman/podman.sock) — not rootful /run/podman/….
+      - ${PODMAN_SOCKET}:/var/run/docker.sock:ro
+    networks:
+      - mcp-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/live', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+networks:
+  mcp-net:
+    driver: bridge
+
+volumes:
+  hangar-data:
+    name: arbiter_hangar-data
+    external: true
+  decisions:
+    name: arbiter_decisions

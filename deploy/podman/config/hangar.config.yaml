@@ -1,0 +1,77 @@
+# Hangar in Podman — arbiter MCP arrives via docker discovery labels.
+# mockfs stays static so approval_list / hold channel can be declared.
+logging:
+  level: INFO
+  json_format: false
+
+persistence:
+  backend: sqlite
+  sqlite:
+    data_dir: /app/data
+
+auth:
+  enabled: true
+  allow_anonymous: false
+  api_key:
+    enabled: true
+    header_name: X-API-Key
+
+tool_access:
+  mode: egress
+
+discovery:
+  enabled: true
+  refresh_interval_s: 15
+  auto_register: true
+  sources:
+    - type: docker
+      mode: additive
+      # Socket is mounted at /var/run/docker.sock (Podman-compatible API).
+      socket_path: /var/run/docker.sock
+
+approvals:
+  enabled: true
+  channel: arbiter
+  arbiter:
+    data_dir: /data/decisions
+    intercept_rules_path: /config/arbiter.intercept.yaml
+    voters_path: /config/arbiter.voters.yaml
+    rules_path: /config/arbiter.rules.yaml
+    # Resolve against this Hangar process (loopback inside the container).
+    resolve_base_url: http://127.0.0.1:8080/api
+    resolve_token_env: ARBITER_HANGAR_RESOLVE_TOKEN
+    principal_id_env: ARBITER_HANGAR_PRINCIPAL_ID
+    hold_margin_seconds: 10
+    min_round_seconds: 20
+
+mcp_servers:
+  # Held demo upstreams — static so tools.approval_list is enforceable.
+  # (Discovery registration does not carry approval_list.)
+  mockfs:
+    mode: subprocess
+    command:
+      - python
+      - /app/mockfs_server.py
+    idle_ttl_s: 300
+    tools:
+      approval_list:
+        - "*"
+      approval_timeout_seconds: 900
+      approval_channel: arbiter
+
+  # HTTP fetch for the curl→voters demo. Local `bash curl` is denied in
+  # OpenCode; agents must call mockhttp/curl via Hangar so quorum runs.
+  mockhttp:
+    mode: subprocess
+    command:
+      - python
+      - /app/mockhttp_server.py
+    idle_ttl_s: 300
+    tools:
+      approval_list:
+        - "*"
+      approval_timeout_seconds: 900
+      approval_channel: arbiter
+
+  # arbiter HTTP MCP is NOT listed here — Hangar discovers the labeled
+  # arbiter container (mcp.hangar.enabled=true, mode=http, port=8765).

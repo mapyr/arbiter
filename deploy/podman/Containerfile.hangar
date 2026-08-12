@@ -1,0 +1,23 @@
+# Hangar 2.6.0 + arbiter approval-delivery entry point.
+# Stock ghcr.io/mcp-hangar/mcp-hangar does NOT ship the arbiter channel.
+FROM ghcr.io/mcp-hangar/mcp-hangar:2.6.0
+
+USER root
+WORKDIR /build
+COPY pyproject.toml README.md ./
+COPY arbiter ./arbiter
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir . \
+    && python -c "from importlib.metadata import entry_points; \
+eps=entry_points(group='mcp_hangar.approvals.delivery'); \
+assert 'arbiter' in {e.name for e in eps}, eps"
+
+COPY deploy/podman/mockfs_server.py /app/mockfs_server.py
+COPY deploy/podman/mockhttp_server.py /app/mockhttp_server.py
+RUN chown hangar:hangar /app/mockfs_server.py /app/mockhttp_server.py
+
+USER hangar
+WORKDIR /app
+EXPOSE 8080
+ENTRYPOINT ["mcp-hangar"]
+CMD ["serve", "--http", "--host", "0.0.0.0", "--port", "8080"]

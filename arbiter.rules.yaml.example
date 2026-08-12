@@ -1,0 +1,24 @@
+critical:
+  paths:
+    - "**/auth/**"
+    - "**/migrations/**"
+    - "**/*_schema.py"
+    - "infra/**"
+    - "**/Dockerfile"
+    - ".github/workflows/**"
+  any_of:
+    - deletes_files: true
+    - touches_public_api: true
+default: routine
+
+# Formulation barriers (disable only by editing this file).
+formulation:
+  deny_universal_scope: true
+  deny_filler_options: true
+
+# Client plan gate (OpenCode plugin → Hangar → arbiter get_gate_policy).
+# plan.mode: on_uncovered | session
+client_gate:
+  plan:
+    mode: on_uncovered
+    arbiter_mcp_server: arbiter

@@ -1,0 +1,30 @@
+# Demo voters — OpenAI-compatible Chat Completions.
+# Keys come from compose env (OpenCode GitHub Copilot oauth by default).
+# Override models to match your provider / plan.
+voters:
+  - id: voter-1
+    base_url: https://api.githubcopilot.com
+    model: gpt-4o
+    api_key_env: ARBITER_VOTER_1_KEY
+    temperature: 0
+    max_tokens: 800
+    timeout_seconds: 60
+  - id: voter-2
+    base_url: https://api.githubcopilot.com
+    model: gpt-4o-mini
+    api_key_env: ARBITER_VOTER_2_KEY
+    temperature: 0
+    max_tokens: 800
+    timeout_seconds: 60
+  - id: voter-3
+    base_url: https://api.githubcopilot.com
+    model: gpt-4o-mini
+    api_key_env: ARBITER_VOTER_3_KEY
+    temperature: 0
+    max_tokens: 800
+    timeout_seconds: 60
+
+round_deadline_seconds: 180
+reveal_round: true
+shadow_mode: false
+baseline_voter: voter-1

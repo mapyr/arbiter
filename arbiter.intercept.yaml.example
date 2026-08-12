@@ -1,0 +1,12 @@
+# Allow-list of MCP tool calls Hangar may hold for arbiter adjudication.
+# Missing this file → refuse adapter start (no default pass / no hold-all).
+# New upstream tools are NOT held until listed here — update when the surface changes.
+# Hangar approval_list must also include the tool (or a matching fnmatch pattern).
+# Deep live demo uses mockfs / "*" — see docs/cookbooks/live-smoke.md.
+hold:
+  - mcp_server: "github"
+    tool: "create_issue"
+  - mcp_server: "filesystem"
+    tool: "write_*"
+  # - mcp_server: "mockfs"
+  #   tool: "*"

@@ -1,0 +1,6 @@
+# Adjudicate held demo upstreams. Do not list hangar_* / arbiter control-plane tools.
+hold:
+  - mcp_server: "mockfs"
+    tool: "*"
+  - mcp_server: "mockhttp"
+    tool: "*"

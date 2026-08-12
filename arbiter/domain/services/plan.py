@@ -1,0 +1,110 @@
+"""Structured work-plan validation for ``ensure_plan`` (client plan gate).
+
+Arbiter owns the schema: agents submit JSON; formulation barriers still apply
+to the derived ``open_decision`` scope/options.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from arbiter.domain.errors import DomainError
+
+
+def validate_plan(plan: Any) -> dict[str, Any]:
+    """Return a normalized plan dict or raise ``DomainError``."""
+    if not isinstance(plan, dict):
+        raise DomainError("plan must be an object")
+    goal = plan.get("goal")
+    if not isinstance(goal, str) or not goal.strip():
+        raise DomainError("plan.goal must be a non-empty string")
+    steps_raw = plan.get("steps")
+    if not isinstance(steps_raw, list) or not steps_raw:
+        raise DomainError("plan.steps must be a non-empty array")
+    steps: list[dict[str, Any]] = []
+    for i, step in enumerate(steps_raw):
+        if not isinstance(step, dict):
+            raise DomainError(f"plan.steps[{i}] must be an object")
+        action = step.get("action")
+        if not isinstance(action, str) or not action.strip():
+            raise DomainError(f"plan.steps[{i}].action must be a non-empty string")
+        normalized: dict[str, Any] = {"action": action.strip()}
+        paths = step.get("paths")
+        if paths is not None:
+            if not isinstance(paths, list) or not all(
+                isinstance(p, str) and p.strip() for p in paths
+            ):
+                raise DomainError(f"plan.steps[{i}].paths must be a string array")
+            normalized["paths"] = [p.strip().replace("\\", "/") for p in paths]
+        tools = step.get("tools")
+        if tools is not None:
+            if not isinstance(tools, list) or not all(
+                isinstance(t, str) and t.strip() for t in tools
+            ):
+                raise DomainError(f"plan.steps[{i}].tools must be a string array")
+            normalized["tools"] = [t.strip() for t in tools]
+        steps.append(normalized)
+
+    scope = plan.get("scope")
+    if scope is None:
+        # Derive scope from step paths; fail if nothing concrete.
+        derived: list[str] = []
+        for step in steps:
+            for path in step.get("paths") or []:
+                if path not in derived:
+                    derived.append(path)
+        if not derived:
+            raise DomainError(
+                "plan.scope required when steps have no paths "
+                "(formulation needs a non-universal scope)"
+            )
+        scope_list = derived
+    else:
+        if not isinstance(scope, list) or not scope:
+            raise DomainError("plan.scope must be a non-empty string array")
+        if not all(isinstance(p, str) and p.strip() for p in scope):
+            raise DomainError("plan.scope entries must be non-empty strings")
+        scope_list = [p.strip().replace("\\", "/") for p in scope]
+
+    options = plan.get("options")
+    options_list: list[str] | None = None
+    if options is not None:
+        if not isinstance(options, list) or not options:
+            raise DomainError("plan.options must be a non-empty string array")
+        if not all(isinstance(o, str) and o.strip() for o in options):
+            raise DomainError("plan.options entries must be non-empty strings")
+        options_list = [o.strip() for o in options]
+
+    out: dict[str, Any] = {
+        "goal": goal.strip(),
+        "steps": steps,
+        "scope": scope_list,
+    }
+    if options_list is not None:
+        out["options"] = options_list
+    rationale = plan.get("rationale")
+    if isinstance(rationale, str) and rationale.strip():
+        out["rationale"] = rationale.strip()
+    return out
+
+
+def plan_evidence_paths(plan: dict[str, Any]) -> list[str]:
+    """Paths for evidence.paths / coverage correlation."""
+    paths: list[str] = []
+    for pattern in plan.get("scope") or []:
+        if isinstance(pattern, str) and pattern.strip():
+            # Strip trailing globs for evidence path list (classifier input).
+            p = pattern.strip().replace("\\", "/")
+            if p.endswith("/**"):
+                p = p[: -len("/**")] or p
+            elif p.endswith("/**/*"):
+                p = p[: -len("/**/*")] or p
+            if p and p not in paths:
+                paths.append(p)
+    for step in plan.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        for path in step.get("paths") or []:
+            if isinstance(path, str) and path.strip() and path not in paths:
+                paths.append(path.strip().replace("\\", "/"))
+    return paths

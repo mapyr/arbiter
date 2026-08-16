@@ -9,8 +9,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from arbiter.application.handlers.commands import CommandHandlers
-from arbiter.application.ports import Clock, EvidenceStore, EventStore, ResponseStore, VoterGateway
 from arbiter.application.services.prompts import (
     build_blind_prompt,
     build_reveal_prompt,
@@ -55,12 +53,12 @@ def _percentile(ordered: list[float], pct: float) -> float:
 
 @dataclass
 class ModelQuorumService:
-    commands: CommandHandlers
-    events: EventStore
-    evidence: EvidenceStore
-    responses: ResponseStore
-    voters: VoterGateway
-    clock: Clock
+    commands: Any
+    events: Any
+    evidence: Any
+    responses: Any
+    voters: Any
+    clock: Any
     config: VotersConfig
     rng: random.Random = field(default_factory=random.Random)
 

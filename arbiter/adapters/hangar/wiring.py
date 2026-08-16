@@ -6,18 +6,10 @@ import asyncio
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Protocol
+from typing import Any
 
 from arbiter.domain.errors import DomainError
 from arbiter.domain.events import HoldAccepted
-
-
-class _Delivery(Protocol):
-    async def send(self, request: Any) -> None: ...
-
-
-class _App(Protocol):
-    def read_all_wire(self) -> list[dict[str, Any]]: ...
 
 
 class _ProbeRequest:
@@ -38,8 +30,8 @@ class _ProbeRequest:
 
 
 async def assert_delivery_wired(
-    delivery: _Delivery,
-    app: _App,
+    delivery: Any,
+    app: Any,
     *,
     timeout_seconds: float = 2.0,
 ) -> str:

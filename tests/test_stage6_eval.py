@@ -235,7 +235,7 @@ async def test_shadow_hold_does_not_gate_and_records_baseline(
         _write_voters(voters, stub.base_url, shadow=True, baseline="voter-1")
         monkeypatch.setenv("ARBITER_VOTERS_PATH", str(voters))
         app = create_application(root=tmp_path / "decisions", voters=voters)
-        from arbiter.application.intercept_rules import parse_intercept_rules
+        from arbiter.domain.services.intercept import parse_intercept_rules
 
         adj = HoldAdjudicator(
             app,

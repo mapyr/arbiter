@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-from arbiter.application.intercept_rules import parse_intercept_rules
+from arbiter.domain.services.intercept import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.bootstrap import create_application
 from arbiter.domain.services.narrowing import narrowing_candidates

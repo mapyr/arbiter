@@ -110,7 +110,7 @@ def test_4_partial_scope_rejected_by_commit_gate(tmp_cwd: Path) -> None:
             "infra/Dockerfile",
         ],
         decision_id=did,
-        rules=app._rules.load(),
+        rules=app.load_rules(),
     )
     assert result["ok"] is False
     assert "arbiter/domain/model/decision.py" in result["uncovered"]
@@ -126,7 +126,7 @@ def test_5_expired_decision_rejected(tmp_cwd: Path) -> None:
         paths=["arbiter/domain/events.py"],
         decision_id=did,
         commit_at=datetime.now(timezone.utc),
-        rules=app._rules.load(),
+        rules=app.load_rules(),
     )
     assert result["ok"] is False
     assert "expired" in result["reason"]
@@ -149,7 +149,7 @@ def test_6_break_glass_records_and_blocks_ci(tmp_cwd: Path) -> None:
         paths=["arbiter/domain/events.py"],
         decision_id=None,
         allow_break_glass=False,
-        rules=app._rules.load(),
+        rules=app.load_rules(),
     )
     assert gate["ok"] is False
     assert gate["reason"] == "break_glass_requires_human_ack"
@@ -158,7 +158,7 @@ def test_6_break_glass_records_and_blocks_ci(tmp_cwd: Path) -> None:
         paths=["arbiter/domain/events.py"],
         decision_id=None,
         allow_break_glass=True,
-        rules=app._rules.load(),
+        rules=app.load_rules(),
     )
     # Still missing decision for critical paths — glass ack alone is not coverage.
     assert gate2["ok"] is False
@@ -171,7 +171,7 @@ def test_7_j5_commit_gate_without_plugin(tmp_cwd: Path) -> None:
         app,
         paths=[".github/workflows/ci.yml"],
         decision_id=None,
-        rules=app._rules.load(),
+        rules=app.load_rules(),
     )
     assert result["ok"] is False
     assert result["reason"] == "missing_decision_trailer"

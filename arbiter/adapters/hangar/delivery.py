@@ -11,7 +11,7 @@ import yaml
 
 from arbiter.adapters.hangar.config import parse_hangar_channel_config, refuse_start
 from arbiter.adapters.hangar.resolve_client import HttpApprovalResolver
-from arbiter.application.intercept_rules import parse_intercept_rules
+from arbiter.domain.services.intercept import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.bootstrap import create_application
 from arbiter.domain.errors import DomainError

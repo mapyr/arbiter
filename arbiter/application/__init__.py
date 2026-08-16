@@ -1,1 +1,1 @@
-"""Application layer — CQRS handlers and ports."""
+"""Application layer — use cases and services."""

@@ -1,4 +1,4 @@
-"""MCP tool surface — maps tools to CQRS handlers."""
+"""MCP tool surface — maps tools to Application methods."""
 
 from __future__ import annotations
 

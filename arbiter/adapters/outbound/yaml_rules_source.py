@@ -15,14 +15,11 @@ def load_rules_yaml(text: str) -> dict[str, Any]:
     return raw
 
 
-class YamlRulesSource:
-    def __init__(self, path: Path) -> None:
-        self.path = Path(path)
-
-    def load(self) -> dict[str, Any] | None:
-        if not self.path.is_file():
-            return None
-        try:
-            return load_rules_yaml(self.path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, ValueError, yaml.YAMLError):
-            return None
+def load_rules_file(path: Path) -> dict[str, Any] | None:
+    path = Path(path)
+    if not path.is_file():
+        return None
+    try:
+        return load_rules_yaml(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError):
+        return None

@@ -18,7 +18,7 @@ import yaml
 from arbiter.adapters.hangar.config import parse_hangar_channel_config
 from arbiter.adapters.hangar.delivery import ArbiterApprovalDelivery, create_delivery
 from arbiter.adapters.hangar.wiring import assert_delivery_wired
-from arbiter.application.intercept_rules import parse_intercept_rules
+from arbiter.domain.services.intercept import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.application.voters_config import parse_voters_config
 from arbiter.bootstrap import create_application

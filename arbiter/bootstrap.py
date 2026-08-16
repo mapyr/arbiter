@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from arbiter.adapters.outbound.fs_evidence_store import FsEvidenceStore
 from arbiter.adapters.outbound.fs_response_store import FsResponseStore
 from arbiter.adapters.outbound.jsonl_event_store import JsonlEventStore
 from arbiter.adapters.outbound.openai_voter_gateway import OpenAIVoterGateway
-from arbiter.adapters.outbound.system_clock import SystemClock
-from arbiter.adapters.outbound.ulid_ids import UlidDecisionIdGenerator
-from arbiter.adapters.outbound.yaml_rules_source import YamlRulesSource
+from arbiter.adapters.outbound.yaml_rules_source import load_rules_file
 from arbiter.adapters.outbound.yaml_voters_source import (
-    YamlVotersSource,
     default_voters_path,
+    load_voters_file,
 )
 from arbiter.application.app import Application
 
@@ -53,10 +53,12 @@ def create_application(
         events=events,
         evidence=evidence,
         responses=responses,
-        rules=YamlRulesSource(rules_file),
-        voters_config=YamlVotersSource(voters_file),
-        clock=SystemClock(),
-        ids=UlidDecisionIdGenerator(),
-        voter_gateway=voter_gateway if voter_gateway is not None else OpenAIVoterGateway(),
+        load_rules=lambda: load_rules_file(rules_file),
+        load_voters=lambda: load_voters_file(voters_file),
+        now=lambda: datetime.now(timezone.utc),
+        new_id=lambda: f"d-{uuid.uuid4().hex}",
+        voter_gateway=voter_gateway
+        if voter_gateway is not None
+        else OpenAIVoterGateway(),
         root=data,
     )

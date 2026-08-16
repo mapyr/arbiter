@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from arbiter.adapters.outbound.yaml_rules_source import YamlRulesSource, load_rules_yaml
+from arbiter.adapters.outbound.yaml_rules_source import load_rules_file, load_rules_yaml
 from arbiter.domain.services.classify import classify, path_matches
 
 
@@ -49,7 +49,7 @@ def test_load_example_rules() -> None:
 
 
 def test_missing_rules_file_is_fail_closed(tmp_path: Path) -> None:
-    assert YamlRulesSource(tmp_path / "missing.yaml").load() is None
+    assert load_rules_file(tmp_path / "missing.yaml") is None
     result = classify({"paths": ["readme.md"]}, None)
     assert result.criticality == "critical"
     assert "no rules file" in result.reason
@@ -80,7 +80,7 @@ def test_unreadable_rules_file_is_fail_closed(tmp_path: Path) -> None:
     bad.write_text("critical: [\n  this is : : broken\n", encoding="utf-8")
     # Parser may return a dict or raise; load() must not yield a
     # permissive classifier either way.
-    loaded = YamlRulesSource(bad).load()
+    loaded = load_rules_file(bad)
     result = classify({"paths": ["docs/x.md"]}, loaded)
     assert result.criticality == "critical"
 

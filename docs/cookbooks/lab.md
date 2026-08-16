@@ -71,6 +71,8 @@ Lab mockfs now exposes the two ledger predicates so `report-eval` can show
 - An allow with `establishes_rule: require_contract_test` (MCP `open_decision`
   / `ensure_plan`), then `mockfs/contract_test`, then a write under that glob
   → `rule_allow`; write without the test → `rule_deny`.
+- `rename_note` is covered only if **both** `src` and `dst` sit in the allow
+  scope (and the contract-test rule fires if either path matches the glob).
 
 Do not add a third class until those shares move. Compose stays shadow.
 

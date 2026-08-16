@@ -333,6 +333,55 @@ async def test_lab_migrate_apply_denied_without_trial(stage4_env: dict) -> None:
 
 
 @pytest.mark.asyncio
+async def test_rename_dst_outside_scope_is_not_covered(stage4_env: dict) -> None:
+    _write_intercept(
+        stage4_env["intercept"], [{"mcp_server": "mockfs", "tool": "*"}]
+    )
+    scenario = StubScenario()
+    for model in ("model-a", "model-b", "model-c"):
+        scenario.on(model, vote_handler("deny"))
+    async with StubServer(scenario) as stub:
+        _write_voters(stage4_env["voters"], stub.base_url)
+        app = create_application(
+            root=stage4_env["data"],
+            rules=stage4_env["rules"],
+            voters=stage4_env["voters"],
+        )
+        opened = app.open_decision(
+            question="Allow notes/**?",
+            options=["allow", "deny"],
+            voters=["voter-1", "voter-2", "voter-3"],
+            evidence={"paths": ["notes/**"]},
+            criticality="critical",
+            ttl_seconds=900,
+            scope=["notes/**"],
+        )
+        await app.run_model_quorum(
+            opened["decision_id"],
+            config=parse_voters_config(yaml.safe_load(stage4_env["voters"].read_text())),
+            rng=random.Random(0),
+        )
+        harness = HoldHarness(
+            create_delivery_for_tests(
+                adjudicator=_adj(app, stage4_env["intercept"]),
+                resolve_callback=lambda *a, **k: asyncio.sleep(0),
+                app=app,
+            )
+        )
+        await harness.run(
+            FakeApprovalRequest(
+                approval_id="ren-1",
+                mcp_server_id="mockfs",
+                tool_name="rename_note",
+                arguments={"src": "notes/a", "dst": "other/x"},
+            )
+        )
+    holds = [e for e in _events(app) if e["event"] == "hold.adjudicated"]
+    assert holds[0]["path"] == "quorum"
+    assert holds[0]["decision_id"] != opened["decision_id"]
+
+
+@pytest.mark.asyncio
 async def test_2_no_coverage_quorum_deny_names_decision(stage4_env: dict) -> None:
     scenario = StubScenario()
     scenario.on("model-a", vote_handler("deny"))

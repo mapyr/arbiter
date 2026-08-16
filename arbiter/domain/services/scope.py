@@ -9,7 +9,7 @@ from typing import Any
 from arbiter.domain.errors import DomainError
 from arbiter.domain.services.classify import path_matches
 
-_PATH_KEYS = ("path", "file", "filepath", "target", "src")
+_PATH_KEYS = ("path", "file", "filepath", "target", "src", "dst")
 
 
 def normalize_scope_patterns(patterns: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
@@ -61,14 +61,27 @@ def uncovered_paths(
     return [p for p in paths if not scope_covers_path(scope, p)]
 
 
-def path_from_arguments(arguments: Mapping[str, Any] | None) -> str | None:
+def paths_from_arguments(arguments: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """Every path-like argument (src and dst on rename both count)."""
     if not arguments:
-        return None
+        return ()
+    out: list[str] = []
+    seen: set[str] = set()
     for key in _PATH_KEYS:
         value = arguments.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip().replace("\\", "/")
-    return None
+        if not isinstance(value, str) or not value.strip():
+            continue
+        normalized = value.strip().replace("\\", "/")
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(normalized)
+    return tuple(out)
+
+
+def path_from_arguments(arguments: Mapping[str, Any] | None) -> str | None:
+    paths = paths_from_arguments(arguments)
+    return paths[0] if paths else None
 
 
 def covers(

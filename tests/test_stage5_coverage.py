@@ -11,7 +11,13 @@ import pytest
 
 from arbiter.application.services.commit_guard import extract_decision_id, verify_commit
 from arbiter.bootstrap import create_application
-from arbiter.domain.services.scope import covers, path_from_arguments, scope_covers_path, uncovered_paths
+from arbiter.domain.services.scope import (
+    covers,
+    path_from_arguments,
+    paths_from_arguments,
+    scope_covers_path,
+    uncovered_paths,
+)
 
 
 def _app(tmp_cwd: Path):
@@ -94,6 +100,44 @@ def test_covers_path_or_call_ref() -> None:
     assert path_from_arguments({"path": "auth/x.py"}) == "auth/x.py"
     assert path_from_arguments({"src": "notes/a"}) == "notes/a"
     assert path_from_arguments({"title": "hi"}) is None
+    assert paths_from_arguments({"src": "notes/a", "dst": "other/x"}) == (
+        "notes/a",
+        "other/x",
+    )
+    assert covers(("notes/**",), paths=["notes/a"]) is True
+    assert covers(("notes/**",), paths=["notes/a", "other/x"]) is False
+
+
+def test_contract_rule_sees_rename_dst() -> None:
+    from arbiter.domain.services.installed_rules import (
+        InstalledRule,
+        RULE_REQUIRE_CONTRACT_TEST,
+        check_installed_rules,
+    )
+
+    rules = (
+        InstalledRule(
+            rule_id="r1",
+            decision_id="d1",
+            kind=RULE_REQUIRE_CONTRACT_TEST,
+            path_glob="notes/**",
+            detail="",
+        ),
+    )
+    landing = check_installed_rules(
+        rules,
+        tool_name="rename_note",
+        arguments={"src": "tmp/a", "dst": "notes/a"},
+        wire_events=[],
+    )
+    assert landing.path == "rule_deny"
+    outside = check_installed_rules(
+        rules,
+        tool_name="rename_note",
+        arguments={"src": "tmp/a", "dst": "other/x"},
+        wire_events=[],
+    )
+    assert outside.path == "no_rule"
 
 
 def test_2_critical_without_coverage_denied(tmp_cwd: Path) -> None:

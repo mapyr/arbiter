@@ -47,6 +47,7 @@ source /tmp/arbiter-live/env.sh
 ```bash
 /tmp/arbiter-live/bin/smoke-b-hold.sh              # write_note
 /tmp/arbiter-live/bin/smoke-b-hold.sh read_note
+/tmp/arbiter-live/bin/smoke-b-hold.sh migrate.apply  # no trial → precondition_denied
 ```
 
 Expect ledger: `hold.accepted` → `decision.opened` (`mode=enforce`) → votes →

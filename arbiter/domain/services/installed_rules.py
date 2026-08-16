@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from arbiter.domain.services.classify import path_matches
-from arbiter.domain.services.scope import path_from_arguments
+from arbiter.domain.services.scope import paths_from_arguments
 
 
 @dataclass(frozen=True)
@@ -68,8 +68,8 @@ def check_installed_rules(
     ``require_contract_test``: writes under path_glob need a prior
     ``hold.adjudicated`` / evidence marker for a contract test with approved=True.
     """
-    path = path_from_arguments(arguments)
-    if path is None:
+    paths = paths_from_arguments(arguments)
+    if not paths:
         return RuleCheckResult(
             ok=True, path="no_rule", rule_id=None, reason="no_path_argument"
         )
@@ -79,7 +79,7 @@ def check_installed_rules(
         for r in rules
         if r.kind == RULE_REQUIRE_CONTRACT_TEST
         and r.path_glob
-        and path_matches(path, r.path_glob)
+        and any(path_matches(p, r.path_glob) for p in paths)
     ]
     if not applicable:
         return RuleCheckResult(
@@ -95,7 +95,7 @@ def check_installed_rules(
             reason="tool_not_write",
         )
 
-    if _contract_test_recorded(wire_events, path=path):
+    if _contract_test_recorded(wire_events, path=paths[0]):
         return RuleCheckResult(
             ok=True,
             path="rule_allow",

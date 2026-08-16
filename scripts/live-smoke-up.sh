@@ -176,61 +176,7 @@ shadow_mode: false
 baseline_voter: voter-1
 YAML
 
-cat > "$LIVE/mockfs_server.py" <<'PY'
-"""Demo MCP server — every tool is held by Hangar → arbiter enforce quorum."""
-from __future__ import annotations
-
-import asyncio
-
-from mcp.server.mcpserver import MCPServer
-
-server = MCPServer("mockfs")
-
-_NOTES: dict[str, str] = {}
-
-
-@server.tool()
-def write_note(path: str, content: str) -> str:
-    """Create/overwrite a note (held → arbiter)."""
-    _NOTES[path] = content
-    return f"ok: wrote {len(content)} bytes to {path}"
-
-
-@server.tool()
-def append_note(path: str, content: str) -> str:
-    """Append to a note (held → arbiter)."""
-    _NOTES[path] = _NOTES.get(path, "") + content
-    return f"ok: append {len(content)} bytes to {path}"
-
-
-@server.tool()
-def delete_note(path: str) -> str:
-    """Delete a note (held → arbiter)."""
-    existed = path in _NOTES
-    _NOTES.pop(path, None)
-    return f"ok: deleted={existed} path={path}"
-
-
-@server.tool()
-def rename_note(src: str, dst: str) -> str:
-    """Rename a note (held → arbiter)."""
-    if src not in _NOTES:
-        return f"err: missing {src}"
-    _NOTES[dst] = _NOTES.pop(src)
-    return f"ok: renamed {src} -> {dst}"
-
-
-@server.tool()
-def read_note(path: str) -> str:
-    """Read a note (also held in deep demo — quorum even for reads)."""
-    if path not in _NOTES:
-        return f"err: missing {path}"
-    return _NOTES[path]
-
-
-if __name__ == "__main__":
-    asyncio.run(server.run_stdio_async())
-PY
+cp "$REPO/deploy/podman/mockfs_server.py" "$LIVE/mockfs_server.py"
 
 SECRET_FILE="$LIVE/.http-secret"
 if [[ ! -f "$SECRET_FILE" ]]; then
@@ -523,6 +469,9 @@ ARGS = {
     "read_note": {"path": "notes/manual.txt"},
     "delete_note": {"path": "notes/manual.txt"},
     "rename_note": {"src": "notes/manual.txt", "dst": "notes/renamed.txt"},
+    "migrate.dry_run": {"migration": "001_init"},
+    "migrate.apply": {"migration": "001_init"},
+    "contract_test": {"path": "notes/manual.txt"},
 }
 if tool not in ARGS:
     raise SystemExit(f"unknown tool {tool!r}; choose from {sorted(ARGS)}")
@@ -734,6 +683,7 @@ Manual checks:
   # B — Hangar hold → enforce quorum (may DENY the tool)
   $LIVE/bin/smoke-b-hold.sh              # write_note
   $LIVE/bin/smoke-b-hold.sh read_note    # reads also held
+  $LIVE/bin/smoke-b-hold.sh migrate.apply  # precondition deny without dry_run
   rg 'mode|baseline|hold.adjudicated|decision.resolved' \$ARBITER_DATA_DIR/ledger.jsonl | tail
 
   # D — unlock L2 with narrow scoped allow (formulation blocks "**/*")

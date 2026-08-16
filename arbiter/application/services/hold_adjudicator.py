@@ -24,7 +24,7 @@ from arbiter.domain.services.intercept import InterceptRules
 from arbiter.domain.services.narrowing import narrowing_candidates
 from arbiter.domain.services.option_kind import is_proceed_kind, option_kind, parse_narrow_spec
 from arbiter.domain.services.preconditions import check_preconditions
-from arbiter.domain.services.scope import call_ref, covers, path_from_arguments
+from arbiter.domain.services.scope import call_ref, covers, paths_from_arguments
 from arbiter.domain.timeutil import format_iso, parse_iso
 
 # Default floor when voters config is absent; otherwise derived from voter timeouts.
@@ -276,10 +276,8 @@ class HoldAdjudicator:
             options = ["allow", "deny"]
             if self._include_escalate:
                 options.append("escalate_to_human")
-        path = path_from_arguments(held.arguments)
-        scope = [call_ref(held.mcp_server_id, held.tool_name)]
-        if path:
-            scope.append(path)
+        paths = paths_from_arguments(held.arguments)
+        scope = [call_ref(held.mcp_server_id, held.tool_name), *paths]
         opened = self._app.open_decision(
             question=(
                 "Does this held tool call fall within what was previously agreed? "
@@ -393,7 +391,7 @@ class HoldAdjudicator:
                 return False
             return True
 
-        path = path_from_arguments(held.arguments)
+        paths = paths_from_arguments(held.arguments)
         for decision_id in decision_ids:
             if decision_id in invalidated:
                 continue
@@ -409,7 +407,7 @@ class HoldAdjudicator:
                 state.scope,
                 mcp_server_id=held.mcp_server_id,
                 tool_name=held.tool_name,
-                paths=(path,) if path else (),
+                paths=paths,
             ):
                 continue
             # S5 — coverage counted over the dependency graph.

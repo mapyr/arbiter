@@ -85,6 +85,18 @@ def validate_plan(plan: Any) -> dict[str, Any]:
     rationale = plan.get("rationale")
     if isinstance(rationale, str) and rationale.strip():
         out["rationale"] = rationale.strip()
+    depends_on = plan.get("depends_on")
+    if depends_on is not None:
+        if not isinstance(depends_on, list) or not all(
+            isinstance(x, str) and x.strip() for x in depends_on
+        ):
+            raise DomainError("plan.depends_on must be a string array")
+        out["depends_on"] = [x.strip() for x in depends_on]
+    establishes_rule = plan.get("establishes_rule")
+    if establishes_rule is not None:
+        if not isinstance(establishes_rule, dict):
+            raise DomainError("plan.establishes_rule must be an object")
+        out["establishes_rule"] = dict(establishes_rule)
     return out
 
 

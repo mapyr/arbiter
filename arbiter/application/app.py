@@ -401,6 +401,12 @@ class Application:
             "failures": list(state.failures),
             "reveal_labels": state.reveal_labels,
             "resolution": state.resolution,
+            "depends_on": list(state.depends_on),
+            "establishes_rule": (
+                dict(state.establishes_rule)
+                if state.establishes_rule is not None
+                else None
+            ),
         }
 
     def get_gate_policy(self) -> dict[str, Any]:

@@ -27,7 +27,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Return client_gate policy from arbiter.rules.yaml "
         "(plan mode: session | on_uncovered; which Hangar MCP server name)."
     ),
-    "open_decision": "Open a decision with a closed option set and voter roster.",
+    "open_decision": "Open a decision with a closed option set, voter roster, and optional scope / depends_on / establishes_rule.",
     "resolve_decision": "Resolve a decision against quorum rules; idempotent.",
     "run_model_quorum": (
         "Collect model votes for an open decision via the blind quorum protocol."
@@ -153,6 +153,8 @@ def create_server(app: Application | None = None) -> MCPServer:
         ttl_seconds: int = 900,
         scope: list[str] | None = None,
         mode: str | None = None,
+        depends_on: list[str] | None = None,
+        establishes_rule: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return store.open_decision(
             question=question,
@@ -163,6 +165,8 @@ def create_server(app: Application | None = None) -> MCPServer:
             ttl_seconds=ttl_seconds,
             scope=scope,
             mode=mode,
+            depends_on=depends_on,
+            establishes_rule=establishes_rule,
         )
 
     @server.tool(

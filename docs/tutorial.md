@@ -155,7 +155,7 @@ arbiter serve   # stdio — attach an MCP client or use tests
 
 | Tool | Purpose |
 |------|---------|
-| `open_decision` | Question, closed options, roster, evidence, optional `scope` |
+| `open_decision` | Question, closed options, roster, evidence, optional `scope` / `depends_on` / `establishes_rule` |
 | `ensure_plan` | Structured plan → open + model quorum |
 | `cast_vote` | One vote; key `(decision_id, voter, round)` — no overwrite |
 | `get_decision` | State from ledger replay |
@@ -441,29 +441,25 @@ Offline check:
 pytest tests/ladder -q
 ```
 
-Opening with dependency / rule uses the **Application API** (hold path and
-`tests/ladder` exercise this). The public MCP `open_decision` tool currently
-exposes `question` / `options` / `voters` / `evidence` / `scope` / `mode` only —
-not `depends_on` / `establishes_rule`:
+MCP `open_decision` and `ensure_plan` (fields on the plan object) take the
+same `depends_on` / `establishes_rule` as Application. Hold path and
+`tests/ladder` exercise cascade and rule enforcement after a proceed resolve.
 
-```python
-from arbiter.bootstrap import create_application
-
-app = create_application()  # respects ARBITER_* env
-app.open_decision(
-    question="Require contract tests under src/**",
-    options=["allow", "deny", "escalate_to_human"],
-    voters=["voter-1", "voter-2", "voter-3"],
-    evidence={"rule": True},
-    scope=["policy/rule"],
-    depends_on=["d-parent-id"],
-    establishes_rule={
-        "kind": "require_contract_test",
-        "path_glob": "src/**",
-        "detail": "writes under src require contract test",
-        "rule_id": "rule-src-contract",
-    },
-)
+```json
+{
+  "question": "Require contract tests under src/**",
+  "options": ["allow", "deny", "escalate_to_human"],
+  "voters": ["voter-1", "voter-2", "voter-3"],
+  "evidence": {"rule": true},
+  "scope": ["policy/rule"],
+  "depends_on": ["d-parent-id"],
+  "establishes_rule": {
+    "kind": "require_contract_test",
+    "path_glob": "src/**",
+    "detail": "writes under src require contract test",
+    "rule_id": "rule-src-contract"
+  }
+}
 ```
 
 ---

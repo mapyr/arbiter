@@ -158,6 +158,79 @@ async def test_mcp_get_decision_read_only(server, ledger: Application) -> None:
         assert view["missing_voters"] == ["voter-1", "voter-2"]
 
 
+_RULE = {
+    "kind": "require_contract_test",
+    "path_glob": "src/**",
+    "detail": "writes under src require contract test",
+    "rule_id": "rule-src-contract",
+}
+
+
+@pytest.mark.asyncio
+async def test_mcp_open_decision_matches_application_deps_and_rule(
+    server, ledger: Application
+) -> None:
+    parent = ledger.open_decision(
+        question="parent",
+        options=["opt-a", "opt-b"],
+        voters=["voter-1", "voter-2"],
+        evidence=ROUTINE_EVIDENCE,
+        criticality="routine",
+        scope=["policy/rule"],
+    )
+    fields = {
+        "question": "Require contract tests under src/**",
+        "options": ["allow", "deny"],
+        "voters": ["voter-1", "voter-2"],
+        "evidence": {"rule": True},
+        "criticality": "routine",
+        "scope": ["policy/rule"],
+        "depends_on": [parent["decision_id"]],
+        "establishes_rule": _RULE,
+    }
+    async with Client(server) as client:
+        via_mcp = tool_payload(await client.call_tool("open_decision", fields))
+        view = tool_payload(
+            await client.call_tool(
+                "get_decision", {"decision_id": via_mcp["decision_id"]}
+            )
+        )
+        real_id = ledger._new_id
+        ledger._new_id = lambda: "d-mcp-loop"
+        try:
+            cycle = await client.call_tool(
+                "open_decision",
+                {**fields, "question": "loop", "depends_on": ["d-mcp-loop"]},
+            )
+        finally:
+            ledger._new_id = real_id
+    via_app = ledger.open_decision(**fields)
+
+    def surface(row: dict) -> dict:
+        return {
+            "depends_on": row["depends_on"],
+            "establishes_rule": row["establishes_rule"],
+            "scope": list(row["scope"]),
+        }
+
+    assert surface(via_mcp) == surface(via_app)
+    assert surface(view) == surface(via_mcp)
+    mcp_wire = next(
+        e
+        for e in ledger.read_all_wire()
+        if e["decision_id"] == via_mcp["decision_id"]
+    )
+    app_wire = next(
+        e
+        for e in ledger.read_all_wire()
+        if e["decision_id"] == via_app["decision_id"]
+    )
+    assert mcp_wire["depends_on"] == app_wire["depends_on"] == [parent["decision_id"]]
+    assert mcp_wire["establishes_rule"] == app_wire["establishes_rule"] == _RULE
+    assert cycle.is_error is True
+    assert "cycle" in tool_error_text(cycle)
+
+
 @pytest.mark.asyncio
 async def test_stdio_installed_package_happy_path(tmp_path: Path) -> None:
     """Acceptance: drive the server over stdio from an installed environment.

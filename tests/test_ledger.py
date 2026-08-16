@@ -384,3 +384,44 @@ def test_ledger_writable_false_on_directory(tmp_path: Path) -> None:
 
     assert ledger_writable(tmp_path / "ledger.jsonl") is True
     assert ledger_writable(tmp_path) is False
+
+
+_RULE = {
+    "kind": "require_contract_test",
+    "path_glob": "src/**",
+    "detail": "writes under src require contract test",
+    "rule_id": "rule-src-contract",
+}
+
+
+def test_open_and_get_decision_surface_deps_and_rule(ledger: Application) -> None:
+    parent = _open_routine(ledger)
+    opened = ledger.open_decision(
+        question="Require contract tests under src/**",
+        options=["allow", "deny"],
+        voters=["voter-1", "voter-2", "voter-3"],
+        evidence={"rule": True},
+        criticality="routine",
+        scope=["policy/rule"],
+        depends_on=[parent["decision_id"]],
+        establishes_rule=_RULE,
+    )
+    assert opened["depends_on"] == [parent["decision_id"]]
+    assert opened["establishes_rule"] == _RULE
+    got = ledger.get_decision(opened["decision_id"])
+    assert got["depends_on"] == [parent["decision_id"]]
+    assert got["establishes_rule"] == _RULE
+    wire = next(
+        e
+        for e in ledger.read_all_wire()
+        if e.get("event") == "decision.opened"
+        and e["decision_id"] == opened["decision_id"]
+    )
+    assert wire["depends_on"] == [parent["decision_id"]]
+    assert wire["establishes_rule"] == _RULE
+
+
+def test_self_dependency_refused(ledger: Application) -> None:
+    ledger._new_id = lambda: "d-loop"
+    with pytest.raises(DomainError, match="cycle"):
+        _open_routine(ledger, depends_on=["d-loop"])

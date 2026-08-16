@@ -61,6 +61,8 @@ async def ensure_plan(
         ttl_seconds=max(1, int(ttl_seconds)),
         opened_by="ensure_plan",
         scope=scope,
+        depends_on=normalized.get("depends_on"),
+        establishes_rule=normalized.get("establishes_rule"),
     )
     decision_id = opened["decision_id"]
     resolved = await app.run_model_quorum(decision_id)

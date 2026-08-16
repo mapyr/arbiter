@@ -100,7 +100,7 @@ Missing or invalid rules → **everything is critical** (fail-closed).
 | `check_coverage` | Path coverage against prior allow scopes |
 
 CLI highlights: `arbiter check-coverage`, `arbiter ensure-plan --plan-file …`,
-`arbiter hangar-call`, `arbiter get-gate-policy`, `arbiter verify-commit`,
+`arbiter hangar-call`, `arbiter hold`, `arbiter get-gate-policy`, `arbiter verify-commit`,
 `arbiter report-eval`.
 
 ## Client layers (OpenCode)
@@ -111,6 +111,8 @@ Built-in edits never leave the IDE, so MCP alone is not enough:
 2. **L2** — thin plugin `arbiter-gate.js` → Hangar → `get_gate_policy` /
    `check_coverage` (CLI fallback without Hangar)
 3. **L3** — `arbiter verify-commit` + CI (`Arbiter-Decision: <id>` trailer)
+4. **Cursor hold (E)** — copy `client/cursor/hooks.json` + `hooks/arbiter-hold.py`
+   into the project `.cursor/`; `arbiter hold` uses the same adjudicator as Hangar
 
 Details: [docs/cookbooks/client-layers.md](docs/cookbooks/client-layers.md).
 

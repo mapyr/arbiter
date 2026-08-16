@@ -1,0 +1,7 @@
+# Cursor hold intercept — merge into the project's arbiter.intercept.yaml.
+# Verdicts still come from Arbiter; this list is the analogue of Hangar approval_list.
+hold:
+  - mcp_server: "cursor"
+    tool: "write"
+  - mcp_server: "cursor"
+    tool: "shell"

@@ -66,6 +66,29 @@ Break-glass on those paths fails CI unless `ARBITER_ALLOW_BREAK_GLASS=1`.
 - Scope is immutable after open
 - Plugin off ⇒ CI still blocks
 
+## Cursor hold (second interceptor)
+
+Hangar stays the reference MCP hold. Cursor does not speak Hangar’s resolve
+HTTP, so it uses the same adjudicator synchronously:
+
+```text
+Cursor hook → arbiter hold → hold.accepted + hold.adjudicated → allow|deny
+```
+
+The hook maps the event to `(mcp_server, tool, arguments)` and prints
+`permission`. It does not classify criticality or coverage. Hangar/Arbiter MCP
+tools are skipped so the control plane cannot deadlock.
+
+Install:
+
+1. Copy `client/cursor/hooks.json` to `.cursor/hooks.json` and
+   `client/cursor/hooks/arbiter-hold.py` to `.cursor/hooks/arbiter-hold.py`.
+2. Merge `client/cursor/arbiter.intercept.yaml` into the project intercept file
+   (`ARBITER_INTERCEPT_PATH`).
+3. `arbiter` on `PATH`; same `ARBITER_DATA_DIR` / voters / rules as Hangar.
+
+L3 still blocks uncovered commits if the hook is off.
+
 ## See also
 
 - [Podman demo](./podman.md)

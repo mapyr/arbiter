@@ -1,4 +1,4 @@
-"""CLI entry — serve, coverage check, commit verify, plan gate, hangar-call."""
+"""CLI entry — serve, coverage check, commit verify, plan gate, hangar-call, hold."""
 
 from __future__ import annotations
 
@@ -174,6 +174,17 @@ def _build_parser() -> argparse.ArgumentParser:
     hc.add_argument("--timeout-seconds", type=float, default=180.0)
     hc.add_argument("--json", action="store_true", default=True)
 
+    hd = sub.add_parser(
+        "hold",
+        help="Synchronous hold: same adjudicator as Hangar, approve|deny JSON",
+    )
+    hd.add_argument("--mcp-server", required=True)
+    hd.add_argument("--tool", required=True)
+    hd.add_argument("--arguments-json", default="{}")
+    hd.add_argument("--timeout-seconds", type=float, default=180.0)
+    hd.add_argument("--approval-id", default=None)
+    hd.add_argument("--json", action="store_true", default=True)
+
     ver = sub.add_parser(
         "verify-commit",
         help="Layer-3 gate: critical paths require a covering decision trailer",
@@ -316,6 +327,34 @@ def _cmd_hangar_call(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_hold(args: argparse.Namespace) -> int:
+    from arbiter.adapters.inbound.sync_hold import run_hold
+
+    try:
+        arguments = json.loads(args.arguments_json)
+    except json.JSONDecodeError as exc:
+        print(f"arguments-json: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(arguments, dict):
+        print("arguments-json must be a JSON object", file=sys.stderr)
+        return 2
+    try:
+        result = asyncio.run(
+            run_hold(
+                mcp_server=str(args.mcp_server),
+                tool=str(args.tool),
+                arguments=arguments,
+                timeout_seconds=float(args.timeout_seconds),
+                approval_id=args.approval_id,
+            )
+        )
+    except DomainError as exc:
+        print(json.dumps({"approved": False, "reason": str(exc)}, ensure_ascii=False))
+        return 2
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result.get("approved") else 2
+
+
 def _cmd_report_eval(args: argparse.Namespace) -> int:
     from arbiter.application.services.eval_report import render_markdown
 
@@ -394,6 +433,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(_cmd_ensure_plan(args))
     if args.command == "hangar-call":
         raise SystemExit(_cmd_hangar_call(args))
+    if args.command == "hold":
+        raise SystemExit(_cmd_hold(args))
     if args.command == "verify-commit":
         raise SystemExit(_cmd_verify_commit(args))
     if args.command == "report-eval":

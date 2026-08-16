@@ -110,7 +110,7 @@ class HoldAdjudicator:
             arguments_hash=held.arguments_hash,
         )
         try:
-            prior = self._prior_for_call(call_id)
+            prior = self._binding_duplicate(call_id)
             if prior is not None:
                 result = AdjudicationResult(
                     approved=bool(prior["approved"]),
@@ -264,7 +264,7 @@ class HoldAdjudicator:
                 "(missing voters config)"
             )
         voters = config.ids
-        shadow = bool(config.shadow_mode) or os.environ.get("ARBITER_SHADOW_MODE") == "1"
+        shadow = self._shadow()
         if self._enable_narrowing:
             options = narrowing_candidates(
                 tool_name=held.tool_name,
@@ -436,18 +436,69 @@ class HoldAdjudicator:
             return decision_id
         return None
 
-    def _prior_for_call(self, call_id: str) -> dict[str, Any] | None:
+    def _shadow(self) -> bool:
+        config = self._app.load_voters_config()
+        return bool(config is not None and config.shadow_mode) or (
+            os.environ.get("ARBITER_SHADOW_MODE") == "1"
+        )
+
+    def _binding_duplicate(self, call_id: str) -> dict[str, Any] | None:
+        """Latest still-binding hold for this call_id, gated for current mode."""
+        matches: list[dict[str, Any]] = []
         for raw in self._app.read_all_wire():
             if raw.get("event") != HoldAdjudicated.TYPE:
                 continue
             if raw.get("call_id") != call_id:
                 continue
-            return {
-                "approved": raw.get("approved"),
-                "reason": raw.get("reason"),
-                "decision_id": raw.get("decision_id"),
-            }
+            matches.append(raw)
+        for raw in reversed(matches):
+            bound = self._recompute_hold(raw)
+            if bound is not None:
+                return bound
         return None
+
+    def _recompute_hold(self, raw: dict[str, Any]) -> dict[str, Any] | None:
+        decision_id = raw.get("decision_id")
+        if not isinstance(decision_id, str) or not decision_id:
+            return {
+                "approved": bool(raw.get("approved")),
+                "reason": str(raw.get("reason") or ""),
+                "decision_id": None,
+            }
+        state = self._app.replay(decision_id)
+        if state is None or state.invalidated or state.resolution is None:
+            return None
+        now = self._app.now()
+        if now >= parse_iso(state.deadline):
+            return None
+        verdict = state.resolution.get("verdict")
+        chosen = str(state.resolution.get("chosen_option") or "")
+        if verdict == "allow_narrow":
+            spec = parse_narrow_spec(chosen)
+            ttl = spec.get("ttl")
+            if ttl and ttl.isdigit():
+                age = (now - parse_iso(state.opened_at)).total_seconds()
+                if age > float(ttl):
+                    return None
+        if self._shadow():
+            return {
+                "approved": True,
+                "reason": str(raw.get("reason") or f"shadow:{decision_id}"),
+                "decision_id": decision_id,
+            }
+        proceed = verdict in ("allow", "allow_narrow")
+        if verdict == "allow_narrow" and proceed:
+            spec = parse_narrow_spec(chosen)
+            reason = f"decision:{decision_id}:allow_narrow:{spec}"
+        elif proceed:
+            reason = f"decision:{decision_id}:allow"
+        else:
+            reason = f"decision:{decision_id}:{state.resolution.get('reason', 'resolved')}"
+        return {
+            "approved": proceed,
+            "reason": reason,
+            "decision_id": decision_id,
+        }
 
     def _decision_ids(self) -> list[str]:
         seen: list[str] = []

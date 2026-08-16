@@ -35,8 +35,15 @@ def _args_hash(arguments: dict[str, Any]) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _write_voters(path: Path, base_url: str, *, round_deadline: float = 30) -> None:
-    cfg = {
+def _write_voters(
+    path: Path,
+    base_url: str,
+    *,
+    round_deadline: float = 30,
+    shadow: bool = False,
+    baseline: str | None = None,
+) -> None:
+    cfg: dict[str, Any] = {
         "voters": [
             {
                 "id": "voter-1",
@@ -65,7 +72,10 @@ def _write_voters(path: Path, base_url: str, *, round_deadline: float = 30) -> N
         ],
         "round_deadline_seconds": round_deadline,
         "reveal_round": False,
+        "shadow_mode": shadow,
     }
+    if baseline:
+        cfg["baseline_voter"] = baseline
     path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
 
 
@@ -557,6 +567,129 @@ async def test_4_duplicate_hold_one_quorum_two_verdicts(stage4_env: dict) -> Non
         arguments_hash=_args_hash(args),
     )
     assert holds[0]["call_id"] == holds[1]["call_id"] == cid
+
+
+@pytest.mark.asyncio
+async def test_duplicate_shadow_deny_gates_after_enforce(
+    stage4_env: dict,
+) -> None:
+    scenario = StubScenario()
+    for model in ("model-a", "model-b", "model-c"):
+        scenario.on(model, vote_handler("deny"))
+    args = {"title": "same"}
+    async with StubServer(scenario) as stub:
+        _write_voters(
+            stage4_env["voters"],
+            stub.base_url,
+            shadow=True,
+            baseline="voter-1",
+        )
+        app = create_application(
+            root=stage4_env["data"],
+            rules=stage4_env["rules"],
+            voters=stage4_env["voters"],
+        )
+        harness = HoldHarness(
+            create_delivery_for_tests(
+                adjudicator=_adj(app, stage4_env["intercept"]),
+                resolve_callback=lambda *a, **k: asyncio.sleep(0),
+                app=app,
+            )
+        )
+        first, _ = await harness.run(
+            FakeApprovalRequest(
+                approval_id="sh-1",
+                mcp_server_id="github",
+                tool_name="create_issue",
+                arguments=args,
+            )
+        )
+        _write_voters(stage4_env["voters"], stub.base_url, shadow=False)
+        second, reason = await harness.run(
+            FakeApprovalRequest(
+                approval_id="sh-2",
+                mcp_server_id="github",
+                tool_name="create_issue",
+                arguments=args,
+            )
+        )
+    assert first is True and second is False
+    holds = [e for e in _events(app) if e["event"] == "hold.adjudicated"]
+    assert holds[0]["path"] == "quorum"
+    assert holds[1]["path"] == "duplicate"
+    assert holds[1]["approved"] is False
+    assert holds[0]["decision_id"] == holds[1]["decision_id"]
+    assert holds[1]["decision_id"] in reason
+    opened = [e for e in _events(app) if e["event"] == "decision.opened"]
+    assert len(opened) == 1
+
+
+@pytest.mark.asyncio
+async def test_duplicate_expired_cover_falls_through_to_quorum(
+    stage4_env: dict,
+) -> None:
+    scenario = StubScenario()
+    for model in ("model-a", "model-b", "model-c"):
+        scenario.on(model, vote_handler("allow"))
+    origin = datetime.now(timezone.utc)
+    clock = [origin]
+    args = {"title": "same"}
+    async with StubServer(scenario) as stub:
+        _write_voters(stage4_env["voters"], stub.base_url)
+        app = create_application(
+            root=stage4_env["data"],
+            rules=stage4_env["rules"],
+            voters=stage4_env["voters"],
+        )
+        app._now = lambda: clock[0]
+        opened = app.open_decision(
+            question="Allow github create_issue?",
+            options=["allow", "deny"],
+            voters=["voter-1", "voter-2", "voter-3"],
+            evidence={"policy": "X"},
+            criticality="critical",
+            ttl_seconds=30,
+            scope=["github/create_issue"],
+        )
+        for voter in ("voter-1", "voter-2", "voter-3"):
+            app.commands.cast_vote(
+                decision_id=opened["decision_id"],
+                voter=voter,
+                option="allow",
+                confidence=1.0,
+                kill_criterion="n/a",
+                bundle_sha256_hex=opened["bundle_sha256"],
+            )
+        app.resolve_decision(opened["decision_id"])
+        harness = HoldHarness(
+            create_delivery_for_tests(
+                adjudicator=_adj(app, stage4_env["intercept"]),
+                resolve_callback=lambda *a, **k: asyncio.sleep(0),
+                app=app,
+            )
+        )
+        first, _ = await harness.run(
+            FakeApprovalRequest(
+                approval_id="ttl-1",
+                mcp_server_id="github",
+                tool_name="create_issue",
+                arguments=args,
+            )
+        )
+        clock[0] = origin + timedelta(seconds=31)
+        second, _ = await harness.run(
+            FakeApprovalRequest(
+                approval_id="ttl-2",
+                mcp_server_id="github",
+                tool_name="create_issue",
+                arguments=args,
+            )
+        )
+    assert first is True and second is True
+    holds = [e for e in _events(app) if e["event"] == "hold.adjudicated"]
+    assert holds[0]["path"] == "covered"
+    assert holds[1]["path"] == "quorum"
+    assert holds[1]["decision_id"] != opened["decision_id"]
 
 
 @pytest.mark.asyncio

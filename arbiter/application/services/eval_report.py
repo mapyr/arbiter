@@ -70,11 +70,13 @@ def build_eval_report(
     internal = _internal_dissent(opens, round2, votes)
     reveal = _reveal_efficacy(opens, round2, votes, resolved)
     cover = _coverage_mix(holds, coverage)
+    reuse = _reuse(opens, holds, coverage)
     cost = _cost_time(votes, holds)
     glass_dist = _glass(glass)
     reversals = _reversibility(resolved, baselines, repo=repo, horizon_days=horizon_days)
 
     thesis = _thesis(divergence, reversals, horizon_days=horizon_days)
+    compounding = _compounding(cover, reuse)
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -94,6 +96,8 @@ def build_eval_report(
         "internal_dissent": internal,
         "reveal_round": reveal,
         "coverage": cover,
+        "reuse": reuse,
+        "compounding": compounding,
         "cost_time": cost,
         "break_glass": glass_dist,
         "reversibility": reversals,
@@ -194,16 +198,79 @@ def _reveal_efficacy(
     }
 
 def _coverage_mix(holds: list[dict], coverage: list[dict]) -> dict[str, Any]:
-    paths = Counter(e.get("path") for e in holds + coverage)
-    total = sum(paths.values())
-    covered = paths.get("covered", 0) + paths.get("duplicate", 0)
-    quorum = paths.get("quorum", 0)
+    all_paths = Counter(e.get("path") for e in holds + coverage)
+    hold_paths = Counter(e.get("path") for e in holds)
+    total = sum(all_paths.values())
+    hold_total = sum(hold_paths.values())
+    covered = all_paths.get("covered", 0) + all_paths.get("duplicate", 0)
+    quorum = all_paths.get("quorum", 0)
+
+    def hold_share(*keys: str) -> float | None:
+        if not hold_total:
+            return None
+        return sum(hold_paths.get(k, 0) for k in keys) / hold_total
+
     return {
-        "counts": dict(paths),
+        "counts": dict(all_paths),
         "total": total,
         "covered_share": (covered / total) if total else None,
         "forced_quorum_share": (quorum / total) if total else None,
+        "hold_counts": dict(hold_paths),
+        "hold_total": hold_total,
+        "hold_covered_share": hold_share("covered", "duplicate"),
+        "hold_quorum_share": hold_share("quorum"),
+        "hold_rule_share": hold_share("rule_allow", "rule_deny"),
+        "hold_precondition_share": hold_share("precondition_denied"),
     }
+
+
+def _reuse(
+    opens: list[dict], holds: list[dict], coverage: list[dict]
+) -> dict[str, Any]:
+    opened = [
+        e["decision_id"]
+        for e in opens
+        if isinstance(e.get("decision_id"), str)
+    ]
+    covering: set[str] = set()
+    for e in holds + coverage:
+        did = e.get("decision_id")
+        if isinstance(did, str) and e.get("path") in ("covered", "duplicate"):
+            covering.add(did)
+    n = len(opened)
+    one_shot = sum(1 for d in opened if d not in covering)
+    return {
+        "opened": n,
+        "reused": n - one_shot,
+        "one_shot": one_shot,
+        "one_shot_share": (one_shot / n) if n else None,
+    }
+
+
+ENFORCE_GATES = {
+    "hold_total_min": 10,
+    "hold_covered_share_min": 0.4,
+    "hold_quorum_share_max": 0.5,
+    "one_shot_share_max": 0.5,
+}
+
+
+def _compounding(cover: dict[str, Any], reuse: dict[str, Any]) -> dict[str, Any]:
+    gates = dict(ENFORCE_GATES)
+    hold_total = int(cover.get("hold_total") or 0)
+    covered = cover.get("hold_covered_share")
+    quorum = cover.get("hold_quorum_share")
+    oneshot = reuse.get("one_shot_share")
+    ready = (
+        hold_total >= gates["hold_total_min"]
+        and covered is not None
+        and covered >= gates["hold_covered_share_min"]
+        and quorum is not None
+        and quorum <= gates["hold_quorum_share_max"]
+        and oneshot is not None
+        and oneshot <= gates["one_shot_share_max"]
+    )
+    return {"ready_to_enforce": ready, "gates": gates}
 
 def _cost_time(votes: list[dict], holds: list[dict]) -> dict[str, Any]:
     lat = [float(v["latency_ms"]) for v in votes if isinstance(v.get("latency_ms"), (int, float))]
@@ -478,6 +545,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         "## Coverage mix",
         "",
         f"{report['coverage']}",
+        "",
+        "## Compounding (shadow → enforce)",
+        "",
+        f"- ready_to_enforce: **{report['compounding']['ready_to_enforce']}**",
+        f"- reuse: {report['reuse']}",
+        f"- gates: {report['compounding']['gates']}",
         "",
         "## Cost & time (distributions)",
         "",

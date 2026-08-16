@@ -173,12 +173,46 @@ def test_eval_report_from_ledger_distributions() -> None:
     assert report["internal_dissent"]["round1_no_quorum"] == 1
     assert report["reveal_round"]["option_changes"] == 1
     assert report["coverage"]["covered_share"] is not None
+    assert report["compounding"]["ready_to_enforce"] is False
+    assert report["reuse"]["opened"] == 2
     assert report["cost_time"]["vote_latency_ms"]["n"] == 2
     assert report["break_glass"]["n"] == 1
     assert report["thesis"]["caveats"]
     md = render_markdown(report)
     assert "caveat" in md.lower()
     assert "Divergence" in md
+    assert "ready_to_enforce" in md
+
+
+def test_eval_report_hold_path_mix_and_reuse() -> None:
+    wire = [
+        {"event": "decision.opened", "decision_id": "d1"},
+        {"event": "decision.opened", "decision_id": "d2"},
+        {"event": "hold.adjudicated", "path": "covered", "decision_id": "d1"},
+        {"event": "hold.adjudicated", "path": "duplicate", "decision_id": "d1"},
+        {"event": "hold.adjudicated", "path": "quorum", "decision_id": "d2"},
+        {"event": "hold.adjudicated", "path": "rule_deny"},
+        {"event": "hold.adjudicated", "path": "precondition_denied"},
+        {"event": "coverage.checked", "path": "covered", "decision_id": "d1"},
+    ]
+    report = build_eval_report(
+        _FakeApp(wire), repo=Path("/nonexistent"), horizon_days=14
+    )
+    hold = report["coverage"]
+    assert hold["hold_total"] == 5
+    assert hold["hold_covered_share"] == 0.4
+    assert hold["hold_quorum_share"] == 0.2
+    assert hold["hold_rule_share"] == 0.2
+    assert hold["hold_precondition_share"] == 0.2
+    assert report["reuse"] == {
+        "opened": 2,
+        "reused": 1,
+        "one_shot": 1,
+        "one_shot_share": 0.5,
+    }
+    assert report["compounding"]["ready_to_enforce"] is False
+    assert report["compounding"]["gates"]["hold_total_min"] == 10
+    assert report["divergence"]["comparable"] == 0
 
 
 def _write_voters(

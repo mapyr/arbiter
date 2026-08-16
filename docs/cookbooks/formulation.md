@@ -32,12 +32,21 @@ Callers cannot disable these at open time — edit `arbiter.rules.yaml`.
 
 ## Reading `report-eval` signals
 
-| Signal | Reading |
-|--------|---------|
-| Unanimous allow + high `covered` share | Scope/options specific enough to reuse |
-| Round-1 miss / reveal | Question or option set underspecified |
-| One-shot decisions (never covering later holds) | Scope too narrow or call identity missing |
-| Very high coverage with broad scopes | Stamp factory — barrier should have fired |
+JSON keys from `arbiter report-eval --format json`. Flip lab `shadow_mode`
+only when `compounding.ready_to_enforce` is true (gates in
+`compounding.gates`).
+
+| Signal | JSON | Reading |
+|--------|------|---------|
+| Hold reuse | `coverage.hold_covered_share` ≥ `gates.hold_covered_share_min` (0.4) | Scope is paying for itself |
+| Forced quorum | `coverage.hold_quorum_share` ≤ `gates.hold_quorum_share_max` (0.5) | Matching / predicates catching calls |
+| Rule / precondition | `coverage.hold_rule_share`, `hold_precondition_share` | Ledger classes firing before quorum |
+| One-shot | `reuse.one_shot_share` ≤ `gates.one_shot_share_max` (0.5) | Decisions cover later holds/coverage |
+| Sample | `coverage.hold_total` ≥ `gates.hold_total_min` (10) | Too few holds → stay in shadow |
+| Round-1 miss / reveal | `internal_dissent` | Question or option set underspecified |
+| Stamp factory | very high coverage + universal scope | Barrier should have fired |
+
+Do not use `thesis.conclusion` (`quorum_adds_value`) as the enforce gate.
 
 ## See also
 

@@ -25,15 +25,24 @@ Out of scope: other IDEs, public install, mTLS, multi-tenant, Hangar docker disc
 ## Shadow window, then enforce
 
 Compose ships `shadow_mode: true` in `deploy/podman/config/arbiter.voters.yaml`.
-Quorum is ledgered; holds still proceed. Use that until `report-eval` looks
-like reuse, not a new decision per click.
+Quorum is ledgered; holds still proceed. Stay in shadow until
+`compounding.ready_to_enforce` is true:
 
 ```bash
 source /tmp/arbiter-podman/env.sh
-arbiter report-eval --horizon-days 14
+arbiter report-eval --horizon-days 14 --format json
 ```
 
-Signals to read: [`formulation.md`](./formulation.md). When ready:
+Gates (`compounding.gates`, same keys in [`formulation.md`](./formulation.md)):
+
+| Key | Default |
+|-----|---------|
+| `hold_total_min` | 10 |
+| `hold_covered_share_min` | 0.4 |
+| `hold_quorum_share_max` | 0.5 |
+| `one_shot_share_max` | 0.5 |
+
+Do not flip compose to enforce from a thin sample. When ready:
 
 1. Set `shadow_mode: false` in `deploy/podman/config/arbiter.voters.yaml`.
 2. `./deploy/podman/up.sh` (recreate Hangar so voters reload).

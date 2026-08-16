@@ -50,7 +50,8 @@ The package is hexagonal:
 | `arbiter.adapters` | application + domain | (outbound I/O lives here) |
 
 `scripts/check_hexagon_boundaries.py` enforces this in CI. Domain changes also
-require review (`CODEOWNERS`).
+require review (`CODEOWNERS`). Domain line-coverage floors (85%, or 90% when
+`arbiter/domain/**` changes) run on the unit suite.
 
 ## Documentation
 

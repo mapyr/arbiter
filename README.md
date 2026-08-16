@@ -162,7 +162,8 @@ python scripts/check_hexagon_boundaries.py
 ```
 
 CI: hexagon boundaries, domain coverage floors, unit + integration matrices
-(Python 3.11–3.13). No live provider keys in CI.
+(Python 3.11–3.13). Pip cache; integration runs beside unit after hexagon.
+No live provider keys in CI.
 
 ## What this package does not do
 

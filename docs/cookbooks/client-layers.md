@@ -41,7 +41,7 @@ Install: copy into `.opencode/plugins/` (Podman `up.sh` does this for the demo).
 ## Layer 3 — commit backstop
 
 CLI: `arbiter verify-commit`  
-Optional hook: `scripts/git-hooks/pre-commit-arbiter`  
+Optional hook: `scripts/git-hooks/commit-msg-arbiter` (git `commit-msg`; needs `ARBITER_DATA_DIR`)  
 CI job: `.github/workflows/ci.yml` → `commit-gate`.
 
 Checks against the ledger:

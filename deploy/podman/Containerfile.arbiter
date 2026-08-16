@@ -1,4 +1,4 @@
-# Arbiter HTTP MCP — discovered by Hangar via mcp.hangar.* labels.
+# Arbiter HTTP MCP — Hangar calls this as a static remote with X-Arbiter-Secret.
 FROM docker.io/library/python:3.12-slim
 
 WORKDIR /app
@@ -8,10 +8,6 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
 ENV ARBITER_HTTP_MCP_PATH=/
-ENV ARBITER_ALLOW_INSECURE_HTTP=1
 EXPOSE 8765
 
-# Path "/" matches Hangar docker discovery (endpoint = http://host:port).
-# Insecure HTTP is intentional on the private compose network; Hangar discovery
-# cannot attach X-Arbiter-Secret auth from labels alone.
 CMD ["arbiter", "serve", "--transport", "http", "--host", "0.0.0.0", "--port", "8765", "--mcp-path", "/"]

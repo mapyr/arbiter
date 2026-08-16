@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Layer 3 — run from .git/hooks/commit-msg (message file is $1).
+# Skip unless ARBITER_DATA_DIR is set (lab / enforce session).
+set -euo pipefail
+if [[ -z "${ARBITER_DATA_DIR:-}" ]]; then
+  exit 0
+fi
+if [[ "${ARBITER_SKIP_COMMIT_GATE:-}" == "1" ]]; then
+  echo "arbiter: commit gate skipped (ARBITER_SKIP_COMMIT_GATE=1)" >&2
+  exit 0
+fi
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+if ! command -v arbiter >/dev/null 2>&1; then
+  echo "arbiter CLI not on PATH; install the package or unset ARBITER_DATA_DIR" >&2
+  exit 1
+fi
+MSG_FILE="${1:-}"
+if [[ -z "$MSG_FILE" || ! -f "$MSG_FILE" ]]; then
+  echo "commit-msg hook expected a message file" >&2
+  exit 1
+fi
+arbiter verify-commit --paths-from staged --message-file "$MSG_FILE"

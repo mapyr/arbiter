@@ -1,5 +1,5 @@
-# Hangar in Podman — arbiter MCP arrives via docker discovery labels.
-# mockfs stays static so approval_list / hold channel can be declared.
+# Hangar in Podman — arbiter MCP is a static remote (shared secret).
+# mockfs / mockhttp stay static so approval_list / hold channel can be declared.
 logging:
   level: INFO
   json_format: false
@@ -20,14 +20,7 @@ tool_access:
   mode: egress
 
 discovery:
-  enabled: true
-  refresh_interval_s: 15
-  auto_register: true
-  sources:
-    - type: docker
-      mode: additive
-      # Socket is mounted at /var/run/docker.sock (Podman-compatible API).
-      socket_path: /var/run/docker.sock
+  enabled: false
 
 approvals:
   enabled: true
@@ -45,8 +38,6 @@ approvals:
     min_round_seconds: 20
 
 mcp_servers:
-  # Held demo upstreams — static so tools.approval_list is enforceable.
-  # (Discovery registration does not carry approval_list.)
   mockfs:
     mode: subprocess
     command:
@@ -59,8 +50,6 @@ mcp_servers:
       approval_timeout_seconds: 900
       approval_channel: arbiter
 
-  # HTTP fetch for the curl→voters demo. Local `bash curl` is denied in
-  # OpenCode; agents must call mockhttp/curl via Hangar so quorum runs.
   mockhttp:
     mode: subprocess
     command:
@@ -73,5 +62,14 @@ mcp_servers:
       approval_timeout_seconds: 900
       approval_channel: arbiter
 
-  # arbiter HTTP MCP is NOT listed here — Hangar discovers the labeled
-  # arbiter container (mcp.hangar.enabled=true, mode=http, port=8765).
+  arbiter:
+    mode: remote
+    endpoint: "http://arbiter:8765/"
+    description: "Arbiter decision gateway"
+    auth:
+      type: api_key
+      api_key: ${ARBITER_HTTP_SECRET}
+      api_key_header: X-Arbiter-Secret
+    tools:
+      deny_list:
+        - resolve_decision

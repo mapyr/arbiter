@@ -55,3 +55,15 @@ def test_hangar_entry_point_loads_and_builds_delivery(
     )
     assert isinstance(built, delivery_mod.ArbiterApprovalDelivery)
     assert callable(getattr(built, "send", None))
+    import json
+
+    ledger = data / "ledger.jsonl"
+    rows = [
+        json.loads(ln)
+        for ln in ledger.read_text(encoding="utf-8").splitlines()
+        if ln.strip()
+    ]
+    assert any(
+        r.get("event") == "hold.accepted" and r.get("mcp_server_id") == "__arbiter_wiring__"
+        for r in rows
+    )

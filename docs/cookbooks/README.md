@@ -5,6 +5,7 @@ are new; use these when you already know what you want to do.
 
 | Cookbook | Task |
 |----------|------|
+| **[lab.md](./lab.md)** | Home-lab production slice (shadow → enforce, L3) |
 | **[podman.md](./podman.md)** | Bring up Hangar + Arbiter under Podman |
 | **[live-quorum.md](./live-quorum.md)** | Three independent live models, one `ensure-plan` |
 | **[live-smoke.md](./live-smoke.md)** | Same stack as host processes (no containers) |

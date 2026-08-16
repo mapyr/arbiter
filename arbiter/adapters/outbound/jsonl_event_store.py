@@ -3,11 +3,35 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from arbiter.adapters.outbound.event_codec import from_wire, to_wire
 from arbiter.domain.events import DomainEvent
 from arbiter.domain.model import Decision
+
+
+def _flock(fh: object, *, exclusive: bool) -> None:
+    import fcntl
+
+    fcntl.flock(
+        fh.fileno(),  # type: ignore[attr-defined]
+        fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH,
+    )
+
+
+def ledger_writable(path: Path) -> bool:
+    """True when the ledger file can be opened, locked, and fsynced (no new event)."""
+    path = Path(path)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            _flock(fh, exclusive=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+        return True
+    except OSError:
+        return False
 
 
 class JsonlEventStore:
@@ -18,20 +42,27 @@ class JsonlEventStore:
             self.path.touch()
 
     def append(self, event: DomainEvent) -> None:
-        line = json.dumps(to_wire(event), ensure_ascii=False, separators=(",", ":"))
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(line + "\n")
-            fh.flush()
+        self.append_all([event])
 
     def append_all(self, events: list[DomainEvent]) -> None:
-        for event in events:
-            self.append(event)
+        if not events:
+            return
+        with self.path.open("a", encoding="utf-8") as fh:
+            _flock(fh, exclusive=True)
+            for event in events:
+                line = json.dumps(
+                    to_wire(event), ensure_ascii=False, separators=(",", ":")
+                )
+                fh.write(line + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
 
     def read_all_wire(self) -> list[dict]:
         if not self.path.exists():
             return []
         rows: list[dict] = []
         with self.path.open("r", encoding="utf-8") as fh:
+            _flock(fh, exclusive=False)
             for line in fh:
                 line = line.strip()
                 if not line:

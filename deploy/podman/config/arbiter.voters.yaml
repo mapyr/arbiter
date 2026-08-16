@@ -26,5 +26,6 @@ voters:
 
 round_deadline_seconds: 180
 reveal_round: true
-shadow_mode: false
+# Flip to false after a shadow window (`arbiter report-eval`). See docs/cookbooks/lab.md.
+shadow_mode: true
 baseline_voter: voter-1

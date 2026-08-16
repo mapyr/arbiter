@@ -349,3 +349,38 @@ def test_bundle_stored_beside_ledger(ledger: Application) -> None:
     assert bundle_sha256(__import__("json").loads(path.read_text())) == opened[
         "bundle_sha256"
     ]
+
+
+def test_concurrent_appends_all_parse(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from arbiter.adapters.outbound.jsonl_event_store import JsonlEventStore
+    from arbiter.domain.events import HoldAccepted
+
+    store = JsonlEventStore(tmp_path / "ledger.jsonl")
+
+    def _one(i: int) -> None:
+        store.append(
+            HoldAccepted(
+                at="2026-01-01T00:00:00.000Z",
+                approval_id=f"a{i}",
+                call_id=f"c{i}",
+                mcp_server_id="s",
+                tool_name="t",
+                arguments_hash=f"{i:064x}",
+                expires_at="2026-01-01T00:01:00.000Z",
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(_one, range(40)))
+    rows = store.read_all_wire()
+    assert len(rows) == 40
+    assert {r["approval_id"] for r in rows} == {f"a{i}" for i in range(40)}
+
+
+def test_ledger_writable_false_on_directory(tmp_path: Path) -> None:
+    from arbiter.adapters.outbound.jsonl_event_store import ledger_writable
+
+    assert ledger_writable(tmp_path / "ledger.jsonl") is True
+    assert ledger_writable(tmp_path) is False

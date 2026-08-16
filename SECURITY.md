@@ -27,7 +27,8 @@ In particular:
   reverse proxy, private network, mTLS).
 - Demo stacks (`deploy/podman/up.sh`, `scripts/live-smoke-up.sh`) generate API
   keys under `/tmp/…` for local use. Treat them as throwaway; never reuse demo
-  secrets in production.
+  secrets in production. The Podman lab uses `ARBITER_HTTP_SECRET` on the
+  compose network and does not publish the arbiter port.
 - Model voters receive only the evidence bundle over chat completions. Do not
   put secrets in evidence that should not leave your trust boundary.
 

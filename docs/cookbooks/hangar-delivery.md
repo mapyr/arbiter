@@ -25,9 +25,9 @@ Delivery is a **notification** (`send` returns `None`). The verdict is a
 
 ## Behavioural wiring check
 
-A bad channel **does not** stop Hangar boot — it degrades to `noop`. Prove the
-wire: send a test hold and require `hold.accepted` in Arbiter’s ledger
-(`assert_delivery_wired` in the adapter). Config presence alone is not proof.
+A bad channel **does not** stop Hangar boot — it degrades to `noop`. The
+arbiter factory refuses start unless a probe `hold.accepted` is in the ledger
+(`prove_wired`). Config presence alone is not proof.
 
 ## Adapter contract (must hold)
 

@@ -10,29 +10,41 @@ import subprocess
 import sys
 from pathlib import Path
 
+from collections.abc import Callable
+
 from arbiter.adapters.inbound.mcp_server import create_server
+from arbiter.adapters.outbound.jsonl_event_store import ledger_writable
 from arbiter.application.services.commit_guard import extract_decision_id
-from arbiter.bootstrap import create_application
+from arbiter.bootstrap import create_application, data_root
 from arbiter.domain.errors import DomainError
 
 
-def _with_health_route(app: object) -> object:
-    """ASGI wrapper: GET /health → 200; everything else → inner app.
+def _with_health_route(
+    app: object, *, ready: Callable[[], bool] | None = None
+) -> object:
+    """ASGI wrapper: GET /health → 200/503; everything else → inner app.
 
-    Hangar docker discovery validates HTTP MCP servers with GET /health
-    before registration (default path; overridable via label).
+    Stays outside the shared-secret wrapper so probes need no header.
+    200 means the ledger path can be locked and fsynced (no event is written).
     """
+
+    check = ready or (lambda: True)
 
     async def asgi(scope, receive, send):  # type: ignore[no-untyped-def]
         if scope.get("type") == "http" and scope.get("path") == "/health":
+            ok = check()
+            body = b"ok" if ok else b"unready"
             await send(
                 {
                     "type": "http.response.start",
-                    "status": 200,
-                    "headers": [(b"content-type", b"text/plain")],
+                    "status": 200 if ok else 503,
+                    "headers": [
+                        (b"content-type", b"text/plain"),
+                        (b"content-length", str(len(body)).encode("ascii")),
+                    ],
                 }
             )
-            await send({"type": "http.response.body", "body": b"ok"})
+            await send({"type": "http.response.body", "body": body})
             return
         await app(scope, receive, send)  # type: ignore[operator]
 
@@ -78,9 +90,10 @@ def serve(
                 file=sys.stderr,
             )
 
-        # Hangar discovery health probe defaults to GET /health (must be 2xx).
-        # Keep it outside the shared-secret wrapper so probes need no header.
-        asgi_app = _with_health_route(mcp_app)
+        asgi_app = _with_health_route(
+            mcp_app,
+            ready=lambda: ledger_writable(data_root() / "ledger.jsonl"),
+        )
         uvicorn.run(asgi_app, host=host, port=port, log_level="info")
         return
     raise SystemExit(f"unsupported transport: {transport!r}")

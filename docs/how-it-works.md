@@ -232,7 +232,7 @@ podman exec arbiter-hangar-1 tail -n 20 /data/decisions/ledger.jsonl | jq -c .
 
 1. Read this file and sketch path A vs path B on paper.
 2. Bring up Podman: [cookbooks/podman.md](./cookbooks/podman.md)
-   (`./deploy/podman/up.sh --reset`).
+   (`./deploy/podman/up.sh --reset`). Lab contract: [cookbooks/lab.md](./cookbooks/lab.md).
 3. Host alternative: [cookbooks/live-smoke.md](./cookbooks/live-smoke.md).
 4. Then: [cookbooks/client-layers.md](./cookbooks/client-layers.md) and the
    [tutorial](./tutorial.md).

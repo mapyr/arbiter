@@ -57,42 +57,6 @@ hangar_logs_match() {
   return "$st"
 }
 
-# Discovery persists endpoint IPs in hangar-data. After compose recreate the
-# arbiter container gets a new IP → hangar_call fails with "No route to host"
-# until we rewrite mcp_server_configs (and bounce Hangar to drop in-memory cache).
-sync_arbiter_endpoint() {
-  local arb_cid arb_ip hangar_cid
-  arb_cid="$(podman ps -q --filter "name=^arbiter-arbiter-1$" 2>/dev/null | head -1)"
-  hangar_cid="$(hangar_container_id)"
-  [[ -n "$arb_cid" && -n "$hangar_cid" ]] || return 0
-  arb_ip="$(podman inspect "$arb_cid" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')"
-  [[ -n "$arb_ip" ]] || return 0
-  podman exec "$hangar_cid" python3 -c "
-import json, sqlite3, sys
-ip = sys.argv[1]
-con = sqlite3.connect('/app/data/mcp_hangar.db')
-row = con.execute(
-    \"SELECT config_json FROM mcp_server_configs WHERE mcp_server_id='arbiter'\"
-).fetchone()
-if not row:
-    sys.exit(0)
-cfg = json.loads(row[0])
-cfg['endpoint'] = f'http://{ip}:8765'
-cfg['runtime_addresses'] = [ip]
-con.execute(
-    '''UPDATE mcp_server_configs
-       SET config_json=?, enabled=1, consecutive_failures=0
-       WHERE mcp_server_id=\"arbiter\"''',
-    (json.dumps(cfg),),
-)
-con.commit()
-print(cfg['endpoint'])
-" "$arb_ip" >/dev/null
-  podman restart "$hangar_cid" >/dev/null
-  sleep 3
-  log "synced Hangar arbiter endpoint → http://${arb_ip}:8765"
-}
-
 command -v podman >/dev/null || die "podman not on PATH"
 podman info >/dev/null 2>&1 || die "podman not usable (is the machine running?)"
 
@@ -133,24 +97,23 @@ KEY_FILE="$STATE_DIR/hangar-api-key"
 
 if [[ "$DO_RESET" -eq 1 ]]; then
   log "reset: compose down -v + wipe Hangar auth volume"
-  # compose.yaml mounts ${PODMAN_SOCKET}; a wiped/partial .env makes down fail
-  # before volumes are removed. Provide a harmless default for teardown only.
-  export PODMAN_SOCKET="${PODMAN_SOCKET:-/run/podman/podman.sock}"
+  export ARBITER_LEDGER_DIR="${ARBITER_LEDGER_DIR:-$STATE_DIR/decisions}"
+  export ARBITER_HTTP_SECRET="${ARBITER_HTTP_SECRET:-reset}"
   if [[ -f "$ENV_FILE" ]]; then
     "${COMPOSE[@]}" --env-file "$ENV_FILE" down -v || true
   else
-    PODMAN_SOCKET="$PODMAN_SOCKET" "${COMPOSE[@]}" down -v || true
+    "${COMPOSE[@]}" down -v || true
   fi
   # hangar-data is external:true — compose down -v never deletes it. Bootstrap
   # also creates it via `podman volume create` before first up. Wipe explicitly
   # or the next bootstrap hits "already bootstrapped" with no key on disk.
   podman volume rm -f "$VOLUME_HANGAR_DATA" >/dev/null 2>&1 || true
-  podman volume rm -f arbiter_decisions >/dev/null 2>&1 || true
-  rm -f "$KEY_FILE" "$ENV_FILE" "$STATE_DIR/env.sh"
+  rm -rf "$STATE_DIR/decisions"
+  rm -f "$KEY_FILE" "$STATE_DIR/http-secret" "$ENV_FILE" "$STATE_DIR/env.sh"
 fi
 
 log "building images (arbiter + hangar-with-arbiter-delivery)"
-podman build -t localhost/arbiter:0.6.0 -f "$DEPLOY/Containerfile.arbiter" "$ROOT"
+podman build -t localhost/arbiter:0.7.2 -f "$DEPLOY/Containerfile.arbiter" "$ROOT"
 podman build -t localhost/arbiter-hangar:2.6.0 -f "$DEPLOY/Containerfile.hangar" "$ROOT"
 
 parse_bootstrap_key() {
@@ -205,21 +168,22 @@ else
   log "saved Hangar API key → $KEY_FILE"
 fi
 
-if [[ -z "${PODMAN_SOCKET:-}" ]]; then
-  # podman compose (docker-compose provider) creates containers on the *rootful*
-  # engine socket inside the machine. Discovery must use the same socket.
-  # Hangar runs privileged so the mount is readable from the container.
-  if podman machine ssh -- 'test -S /run/podman/podman.sock' 2>/dev/null; then
-    PODMAN_SOCKET="/run/podman/podman.sock"
-  else
-    PODMAN_SOCKET="/var/run/docker.sock"
-  fi
+SECRET_FILE="$STATE_DIR/http-secret"
+if [[ ! -f "$SECRET_FILE" ]]; then
+  openssl rand -hex 16 >"$SECRET_FILE"
+  chmod 600 "$SECRET_FILE"
+  log "generated HTTP shared secret → $SECRET_FILE"
 fi
-log "PODMAN_SOCKET=$PODMAN_SOCKET (must match compose engine socket)"
+ARBITER_HTTP_SECRET="$(cat "$SECRET_FILE")"
+
+LEDGER_DIR="$STATE_DIR/decisions"
+mkdir -p "$LEDGER_DIR"
+chmod 777 "$LEDGER_DIR"
 
 cat >"$ENV_FILE" <<EOF
 HANGAR_HOST_PORT=${HANGAR_HOST_PORT}
-PODMAN_SOCKET=${PODMAN_SOCKET}
+ARBITER_LEDGER_DIR=${LEDGER_DIR}
+ARBITER_HTTP_SECRET=${ARBITER_HTTP_SECRET}
 ARBITER_HANGAR_RESOLVE_TOKEN=${HANGAR_API_KEY}
 ARBITER_VOTER_1_KEY=${COPILOT_ACCESS}
 ARBITER_VOTER_2_KEY=${COPILOT_ACCESS}
@@ -261,38 +225,20 @@ done
   die "Hangar /health/live not ready"
 }
 
-log "waiting for discovery to register arbiter…"
+log "waiting for static arbiter MCP…"
 registered=0
 hangar_cid=""
 for _ in $(seq 1 45); do
   hangar_cid="$(hangar_container_id)"
-  if [[ -n "$hangar_cid" ]] && hangar_logs_match "$hangar_cid" \
-    "discovery_registered_mcp_server|fleet_restored.*arbiter|mcp_servers.: .\\[.*arbiter|conflicts with static config"; then
-    # "conflicts with static config" = prior discovery persisted arbiter into Hangar DB.
-    registered=1
-    break
-  fi
   body="$(curl -sS -H "X-API-Key: ${HANGAR_API_KEY}" \
     "http://127.0.0.1:${HANGAR_HOST_PORT}/api/mcp_servers" 2>/dev/null || true)"
-  if printf '%s' "$body" | rg -q 'arbiter' \
+  if printf '%s' "$body" | rg -q '"arbiter"' \
     && ! printf '%s' "$body" | rg -q 'authentication_failed|rate_limit'; then
     registered=1
     break
   fi
   sleep 2
 done
-
-if [[ "$registered" -eq 1 ]]; then
-  sync_arbiter_endpoint
-  # health after Hangar bounce
-  for _ in $(seq 1 30); do
-    code="$(curl -sS -o /dev/null -w '%{http_code}' \
-      -H "X-API-Key: ${HANGAR_API_KEY}" \
-      "http://127.0.0.1:${HANGAR_HOST_PORT}/health/live" 2>/dev/null || true)"
-    [[ "$code" == "200" ]] && break
-    sleep 1
-  done
-fi
 
 delivery_ok=0
 hangar_cid="$(hangar_container_id)"
@@ -303,8 +249,7 @@ fi
 # OpenCode project (MCP + L2 plugin) — `source env.sh && opencode` from repo
 # root is NOT enough; OpenCode reads config from the project directory.
 PROJECT_DIR="$STATE_DIR/project"
-mkdir -p "$PROJECT_DIR/.opencode/plugins" "$PROJECT_DIR/src" "$PROJECT_DIR/auth" \
-  "$STATE_DIR/decisions-l2"
+mkdir -p "$PROJECT_DIR/.opencode/plugins" "$PROJECT_DIR/src" "$PROJECT_DIR/auth"
 cp "$ROOT/client/opencode/plugins/arbiter-gate.js" \
   "$PROJECT_DIR/.opencode/plugins/arbiter-gate.js"
 python3 - "$PROJECT_DIR" "$HANGAR_API_KEY" "$HANGAR_HOST_PORT" "$OPENCODE_MODEL" <<'PY'
@@ -392,6 +337,20 @@ cfg = {
 (proj / "auth" / "handler.py").write_text("def login(): pass\n", encoding="utf-8")
 PY
 
+if [[ ! -d "$PROJECT_DIR/.git" ]]; then
+  git -C "$PROJECT_DIR" init -q
+  log "git init $PROJECT_DIR (L3 commit-msg hook)"
+fi
+mkdir -p "$PROJECT_DIR/.git/hooks"
+cat >"$PROJECT_DIR/.git/hooks/commit-msg" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+# shellcheck disable=SC1091
+source $(printf '%q' "$STATE_DIR/env.sh")
+exec $(printf '%q' "$ROOT/scripts/git-hooks/commit-msg-arbiter") "\$@"
+EOF
+chmod 755 "$PROJECT_DIR/.git/hooks/commit-msg"
+
 cat >"$STATE_DIR/env.sh" <<EOF
 # Generated by deploy/podman/up.sh — host-side helpers
 export ARBITER_PODMAN_STATE=$(printf '%q' "$STATE_DIR")
@@ -400,15 +359,15 @@ export HANGAR_URL=http://127.0.0.1:${HANGAR_HOST_PORT}
 export HANGAR_API_KEY=$(printf '%q' "$HANGAR_API_KEY")
 export ARBITER_HANGAR_RESOLVE_TOKEN=\$HANGAR_API_KEY
 export ARBITER_HANGAR_PRINCIPAL_ID=service:arbiter
+export ARBITER_HTTP_SECRET=$(printf '%q' "$ARBITER_HTTP_SECRET")
 export ARBITER_VOTER_1_KEY=$(printf '%q' "$COPILOT_ACCESS")
 export ARBITER_VOTER_2_KEY=\$ARBITER_VOTER_1_KEY
 export ARBITER_VOTER_3_KEY=\$ARBITER_VOTER_1_KEY
 export OPENCODE_PROJECT=$(printf '%q' "$PROJECT_DIR")
-# L2 plugin (arbiter-gate) — Hangar → injected arbiter MCP (plan + coverage)
 export PATH=$(printf '%q' "$ROOT/.venv/bin"):\$PATH
 export ARBITER_BIN=$(printf '%q' "$ROOT/.venv/bin/arbiter")
 export ARBITER_MCP_SERVER=arbiter
-export ARBITER_DATA_DIR=$(printf '%q' "$STATE_DIR/decisions-l2")
+export ARBITER_DATA_DIR=$(printf '%q' "$LEDGER_DIR")
 export ARBITER_RULES_PATH=$(printf '%q' "$ROOT/deploy/podman/config/arbiter.rules.yaml")
 export ARBITER_VOTERS_PATH=$(printf '%q' "$ROOT/deploy/podman/config/arbiter.voters.yaml")
 export ARBITER_GATE_ALL=1
@@ -419,35 +378,29 @@ chmod 600 "$STATE_DIR/env.sh"
 cat <<EOF
 
 ────────────────────────────────────────────────────────────
-PODMAN STACK READY
+PODMAN LAB READY (shadow until you flip voters.yaml)
 
   hangar   : http://127.0.0.1:${HANGAR_HOST_PORT}/mcp
-  arbiter  : discovered via labels (not published to host)
+  arbiter  : http://arbiter:8765/ (compose DNS, X-Arbiter-Secret)
+  ledger   : $LEDGER_DIR
   delivery : $([[ "$delivery_ok" -eq 1 ]] && echo ArbiterApprovalDelivery || echo CHECK LOGS)
-  discover : $([[ "$registered" -eq 1 ]] && echo arbiter registered || echo PENDING — see docs)
+  mcp      : $([[ "$registered" -eq 1 ]] && echo arbiter static remote || echo PENDING)
   opencode : $PROJECT_DIR
 
   source $STATE_DIR/env.sh
   cd \$OPENCODE_PROJECT && opencode
-  # plan gate: ARBITER_PLAN_REQUIRED → hangar_call arbiter/ensure_plan
-  # bash OK; local curl denied → hangar_call mockhttp/curl (voters)
-  # (MCP/plugins live in the project dir — not in the arbiter git root)
+  arbiter report-eval --horizon-days 14
+  # Flip shadow_mode: false in deploy/podman/config/arbiter.voters.yaml, then up.sh
 
-Useful:
-  podman compose -f $DEPLOY/compose.yaml --env-file $ENV_FILE ps
-  curl -sS -L -H "X-API-Key: \$HANGAR_API_KEY" \$HANGAR_URL/api/mcp_servers | jq .
-  $DEPLOY/up.sh --logs
-  $DEPLOY/up.sh --down
-
-Docs: $ROOT/docs/cookbooks/podman.md
+Docs: $ROOT/docs/cookbooks/lab.md
 ────────────────────────────────────────────────────────────
 EOF
 
 [[ "$delivery_ok" -eq 1 ]] || die "Hangar did not load ArbiterApprovalDelivery — check image build / entry point"
 if [[ "$registered" -ne 1 ]]; then
-  log "WARN: arbiter not registered yet — check PODMAN_SOCKET (/run/podman/podman.sock), /health, quarantine in hangar logs"
+  log "WARN: arbiter MCP not listed yet — check ARBITER_HTTP_SECRET and Hangar logs"
   if [[ -n "$hangar_cid" ]]; then
-    podman logs "$hangar_cid" 2>&1 | rg -i 'quarantine|Health check|discovery_registered' | tail -20 || true
+    podman logs "$hangar_cid" 2>&1 | tail -40 || true
   fi
   exit 1
 fi

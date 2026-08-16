@@ -67,7 +67,7 @@ under `responses/`.
 |-----|---------|
 | **[docs/tutorial.md](docs/tutorial.md)** | Install → decision → Hangar → shadow |
 | **[docs/how-it-works.md](docs/how-it-works.md)** | Roles, two gates, ledger, fail-closed |
-| **[docs/cookbooks/](docs/cookbooks/README.md)** | Podman, layers, Hangar, formulation |
+| **[docs/cookbooks/](docs/cookbooks/README.md)** | Podman, lab slice, layers, Hangar, formulation |
 | [docs/README.md](docs/README.md) | Doc index |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup and PR expectations |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |

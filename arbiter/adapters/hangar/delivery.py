@@ -11,10 +11,12 @@ import yaml
 
 from arbiter.adapters.hangar.config import parse_hangar_channel_config, refuse_start
 from arbiter.adapters.hangar.resolve_client import HttpApprovalResolver
+from arbiter.adapters.hangar.wiring import probe_request
 from arbiter.domain.services.intercept import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.bootstrap import create_application
 from arbiter.domain.errors import DomainError
+from arbiter.domain.events import HoldAccepted
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,24 @@ class ArbiterApprovalDelivery:
                 )
             except Exception:  # noqa: BLE001
                 logger.exception("arbiter_resolve_deny_failed")
+
+    def prove_wired(self) -> str:
+        """Refuse start unless ``send``'s Z1 path lands ``hold.accepted``."""
+        if self._app is None:
+            raise DomainError("delivery app not configured")
+        request = probe_request()
+        held = self._to_held(request)
+        self._adjudicator.accept(held)
+        for raw in self._app.read_all_wire():
+            if (
+                raw.get("event") == HoldAccepted.TYPE
+                and raw.get("approval_id") == held.approval_id
+            ):
+                return held.approval_id
+        raise DomainError(
+            f"wiring probe failed: hold.accepted for {held.approval_id!r} "
+            "not in ledger"
+        )
 
     def _to_held(self, request: Any) -> HeldCall:
         approval_id = getattr(request, "approval_id", None)
@@ -157,9 +177,15 @@ def create_delivery(channel_config: dict[str, Any] | None) -> ArbiterApprovalDel
         hold_margin_seconds=cfg.hold_margin_seconds,
         min_round_seconds=cfg.min_round_seconds,
     )
-    return ArbiterApprovalDelivery(
+    delivery = ArbiterApprovalDelivery(
         adjudicator=adjudicator, resolver=resolver, app=app
     )
+    try:
+        delivery.prove_wired()
+    except DomainError as exc:
+        refuse_start(str(exc))
+        raise  # pragma: no cover
+    return delivery
 
 
 __all__ = [

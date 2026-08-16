@@ -29,6 +29,10 @@ class _ProbeRequest:
         self.tenant_id = None
 
 
+def probe_request(approval_id: str | None = None) -> _ProbeRequest:
+    return _ProbeRequest(approval_id or f"wiring-{uuid.uuid4().hex}")
+
+
 async def assert_delivery_wired(
     delivery: Any,
     app: Any,
@@ -40,8 +44,8 @@ async def assert_delivery_wired(
     Hangar unknown-channel / factory failures degrade to noop and still boot.
     This assertion is what refuses stage-4 start when notifications never arrive.
     """
-    approval_id = f"wiring-{uuid.uuid4().hex}"
-    request = _ProbeRequest(approval_id)
+    request = probe_request()
+    approval_id = request.approval_id
     await delivery.send(request)
 
     deadline = asyncio.get_running_loop().time() + timeout_seconds

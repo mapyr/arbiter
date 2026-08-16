@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbiter"
-version = "0.7.1"
+version = "0.7.2"
 description = "Deterministic MCP decision gateway with an append-only ledger"
 readme = "README.md"
 license = { text = "MIT" }

@@ -693,6 +693,86 @@ async def test_duplicate_expired_cover_falls_through_to_quorum(
 
 
 @pytest.mark.asyncio
+async def test_rule_deny_same_call_retries_after_contract_test(
+    stage4_env: dict,
+) -> None:
+    _write_intercept(
+        stage4_env["intercept"], [{"mcp_server": "mockfs", "tool": "*"}]
+    )
+    scenario = StubScenario()
+    for model in ("model-a", "model-b", "model-c"):
+        scenario.on(model, vote_handler("allow"))
+    args = {"path": "src/a.py", "content": "x"}
+    async with StubServer(scenario) as stub:
+        _write_voters(stage4_env["voters"], stub.base_url)
+        app = create_application(
+            root=stage4_env["data"],
+            rules=stage4_env["rules"],
+            voters=stage4_env["voters"],
+        )
+        opened = app.open_decision(
+            question="Require contract tests under src/**",
+            options=["allow", "deny"],
+            voters=["voter-1", "voter-2", "voter-3"],
+            evidence={"rule": True},
+            criticality="critical",
+            ttl_seconds=900,
+            scope=["src/**", "mockfs/contract_test"],
+            establishes_rule={
+                "kind": "require_contract_test",
+                "path_glob": "src/**",
+                "rule_id": "rule-src-contract",
+            },
+        )
+        for voter in ("voter-1", "voter-2", "voter-3"):
+            app.commands.cast_vote(
+                decision_id=opened["decision_id"],
+                voter=voter,
+                option="allow",
+                confidence=1.0,
+                kill_criterion="n/a",
+                bundle_sha256_hex=opened["bundle_sha256"],
+            )
+        app.resolve_decision(opened["decision_id"])
+        harness = HoldHarness(
+            create_delivery_for_tests(
+                adjudicator=_adj(app, stage4_env["intercept"]),
+                resolve_callback=lambda *a, **k: asyncio.sleep(0),
+                app=app,
+            )
+        )
+        first, _ = await harness.run(
+            FakeApprovalRequest(
+                approval_id="r1",
+                mcp_server_id="mockfs",
+                tool_name="write_note",
+                arguments=args,
+            )
+        )
+        await harness.run(
+            FakeApprovalRequest(
+                approval_id="ct",
+                mcp_server_id="mockfs",
+                tool_name="contract_test",
+                arguments={"path": "src/a.py"},
+            )
+        )
+        second, reason = await harness.run(
+            FakeApprovalRequest(
+                approval_id="r2",
+                mcp_server_id="mockfs",
+                tool_name="write_note",
+                arguments=args,
+            )
+        )
+    assert first is False and second is True
+    holds = [e for e in _events(app) if e["event"] == "hold.adjudicated"]
+    assert holds[0]["path"] == "rule_deny"
+    assert holds[-1]["path"] == "rule_allow"
+    assert "contract_test_ok" in reason
+
+
+@pytest.mark.asyncio
 async def test_5_arbiter_unavailable_hold_times_out_deny(stage4_env: dict) -> None:
     class HangDelivery:
         async def send(self, request: Any) -> None:

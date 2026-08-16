@@ -460,8 +460,12 @@ class HoldAdjudicator:
     def _recompute_hold(self, raw: dict[str, Any]) -> dict[str, Any] | None:
         decision_id = raw.get("decision_id")
         if not isinstance(decision_id, str) or not decision_id:
+            # Deny without a decision (rule/precondition/error) can flip when
+            # ledger state changes — do not freeze the first fail.
+            if not raw.get("approved"):
+                return None
             return {
-                "approved": bool(raw.get("approved")),
+                "approved": True,
                 "reason": str(raw.get("reason") or ""),
                 "decision_id": None,
             }

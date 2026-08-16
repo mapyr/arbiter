@@ -33,6 +33,33 @@ def test_validate_plan_derives_scope_from_step_paths() -> None:
     assert "establishes_rule" not in plan
 
 
+def test_validate_plan_adds_tool_refs_to_scope() -> None:
+    plan = validate_plan(
+        {
+            "goal": "touch handler",
+            "steps": [
+                {
+                    "action": "edit",
+                    "paths": ["auth/handler.py"],
+                    "tools": ["write_file", "github/create_issue"],
+                }
+            ],
+            "scope": ["auth/**"],
+        }
+    )
+    assert plan["scope"] == ["auth/**", "*/write_file", "github/create_issue"]
+
+
+def test_validate_plan_tools_only_derives_scope() -> None:
+    plan = validate_plan(
+        {
+            "goal": "open issue",
+            "steps": [{"action": "create", "tools": ["github/create_issue"]}],
+        }
+    )
+    assert plan["scope"] == ["github/create_issue"]
+
+
 def test_validate_plan_passes_deps_and_rule() -> None:
     rule = {
         "kind": "require_contract_test",

@@ -11,7 +11,7 @@ import pytest
 
 from arbiter.application.services.commit_guard import extract_decision_id, verify_commit
 from arbiter.bootstrap import create_application
-from arbiter.domain.services.scope import scope_covers_path, uncovered_paths
+from arbiter.domain.services.scope import covers, path_from_arguments, scope_covers_path, uncovered_paths
 
 
 def _app(tmp_cwd: Path):
@@ -75,6 +75,24 @@ def test_scope_covers_absolute_path_with_relative_pattern() -> None:
     abs_path = "/private/tmp/arbiter-podman/project/auth/handler.py"
     assert scope_covers_path(scope, abs_path)
     assert uncovered_paths(scope, [abs_path]) == []
+
+
+def test_covers_path_or_call_ref() -> None:
+    mixed = ("auth/**", "github/create_issue")
+    assert covers(mixed, paths=["auth/x.py"]) is True
+    assert covers(mixed, mcp_server_id="github", tool_name="create_issue") is True
+    assert covers(mixed, mcp_server_id="fs", tool_name="write_file") is False
+    assert (
+        covers(
+            mixed,
+            mcp_server_id="fs",
+            tool_name="write_file",
+            paths=["auth/x.py"],
+        )
+        is True
+    )
+    assert path_from_arguments({"path": "auth/x.py"}) == "auth/x.py"
+    assert path_from_arguments({"title": "hi"}) is None
 
 
 def test_2_critical_without_coverage_denied(tmp_cwd: Path) -> None:

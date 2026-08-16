@@ -47,17 +47,11 @@ def validate_plan(plan: Any) -> dict[str, Any]:
 
     scope = plan.get("scope")
     if scope is None:
-        # Derive scope from step paths; fail if nothing concrete.
         derived: list[str] = []
         for step in steps:
             for path in step.get("paths") or []:
                 if path not in derived:
                     derived.append(path)
-        if not derived:
-            raise DomainError(
-                "plan.scope required when steps have no paths "
-                "(formulation needs a non-universal scope)"
-            )
         scope_list = derived
     else:
         if not isinstance(scope, list) or not scope:
@@ -65,6 +59,16 @@ def validate_plan(plan: Any) -> dict[str, Any]:
         if not all(isinstance(p, str) and p.strip() for p in scope):
             raise DomainError("plan.scope entries must be non-empty strings")
         scope_list = [p.strip().replace("\\", "/") for p in scope]
+    for step in steps:
+        for tool in step.get("tools") or []:
+            pat = tool if "/" in tool else f"*/{tool}"
+            if pat not in scope_list:
+                scope_list.append(pat)
+    if not scope_list:
+        raise DomainError(
+            "plan.scope required when steps have no paths or tools "
+            "(formulation needs a non-universal scope)"
+        )
 
     options = plan.get("options")
     options_list: list[str] | None = None

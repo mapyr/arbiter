@@ -24,7 +24,7 @@ from arbiter.domain.services.intercept import InterceptRules
 from arbiter.domain.services.narrowing import narrowing_candidates
 from arbiter.domain.services.option_kind import is_proceed_kind, option_kind, parse_narrow_spec
 from arbiter.domain.services.preconditions import check_preconditions
-from arbiter.domain.services.scope import call_ref, scope_covers
+from arbiter.domain.services.scope import call_ref, covers, path_from_arguments
 from arbiter.domain.timeutil import format_iso, parse_iso
 
 # Default floor when voters config is absent; otherwise derived from voter timeouts.
@@ -276,6 +276,10 @@ class HoldAdjudicator:
             options = ["allow", "deny"]
             if self._include_escalate:
                 options.append("escalate_to_human")
+        path = path_from_arguments(held.arguments)
+        scope = [call_ref(held.mcp_server_id, held.tool_name)]
+        if path:
+            scope.append(path)
         opened = self._app.open_decision(
             question=(
                 "Does this held tool call fall within what was previously agreed? "
@@ -287,7 +291,7 @@ class HoldAdjudicator:
             criticality="critical",
             ttl_seconds=max(1, int(budget)),
             opened_by="hold_adjudicator",
-            scope=[call_ref(held.mcp_server_id, held.tool_name)],
+            scope=scope,
             mode="shadow" if shadow else "enforce",
         )
         decision_id = opened["decision_id"]
@@ -389,6 +393,7 @@ class HoldAdjudicator:
                 return False
             return True
 
+        path = path_from_arguments(held.arguments)
         for decision_id in decision_ids:
             if decision_id in invalidated:
                 continue
@@ -400,7 +405,12 @@ class HoldAdjudicator:
                 continue
             if now >= parse_iso(state.deadline):
                 continue
-            if not scope_covers(state.scope, held.mcp_server_id, held.tool_name):
+            if not covers(
+                state.scope,
+                mcp_server_id=held.mcp_server_id,
+                tool_name=held.tool_name,
+                paths=(path,) if path else (),
+            ):
                 continue
             # S5 — coverage counted over the dependency graph.
             ok, _bad = dependencies_still_hold(
@@ -421,13 +431,7 @@ class HoldAdjudicator:
                 if path_pat:
                     from arbiter.domain.services.classify import path_matches
 
-                    call_path = None
-                    for key in ("path", "file", "filepath", "target"):
-                        value = held.arguments.get(key)
-                        if isinstance(value, str) and value.strip():
-                            call_path = value.strip().replace("\\", "/")
-                            break
-                    if call_path is None or not path_matches(call_path, path_pat):
+                    if path is None or not path_matches(path, path_pat):
                         continue
             return decision_id
         return None

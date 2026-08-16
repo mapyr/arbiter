@@ -240,6 +240,68 @@ async def test_1_covered_by_prior_allow(stage4_env: dict) -> None:
 
 
 @pytest.mark.asyncio
+async def test_plan_allow_covers_hold_on_path(stage4_env: dict) -> None:
+    scenario = StubScenario()
+    for model in ("model-a", "model-b", "model-c"):
+        scenario.on(model, vote_handler("allow"))
+    async with StubServer(scenario) as stub:
+        _write_voters(stage4_env["voters"], stub.base_url)
+        app = create_application(
+            root=stage4_env["data"],
+            rules=stage4_env["rules"],
+            voters=stage4_env["voters"],
+        )
+        planned = await app.ensure_plan(
+            {
+                "goal": "Update auth handler",
+                "steps": [
+                    {
+                        "action": "edit auth handler",
+                        "paths": ["auth/handler.py"],
+                        "tools": ["filesystem/write_file"],
+                    }
+                ],
+                "scope": ["auth/**"],
+            }
+        )
+        assert planned["approved"] is True
+        delivery = create_delivery_for_tests(
+            adjudicator=_adj(app, stage4_env["intercept"]),
+            resolve_callback=lambda *a, **k: asyncio.sleep(0),
+            app=app,
+        )
+        harness = HoldHarness(delivery)
+        approved, reason = await harness.run(
+            FakeApprovalRequest(
+                approval_id="plan-cover",
+                mcp_server_id="filesystem",
+                tool_name="write_file",
+                arguments={"path": "auth/x.py"},
+            )
+        )
+        again, _ = await harness.run(
+            FakeApprovalRequest(
+                approval_id="plan-cover-dup",
+                mcp_server_id="filesystem",
+                tool_name="write_file",
+                arguments={"path": "auth/x.py"},
+            )
+        )
+    assert approved is True and again is True
+    assert planned["decision_id"] in reason
+    holds = [e for e in _events(app) if e["event"] == "hold.adjudicated"]
+    assert holds[0]["path"] == "covered"
+    assert holds[0]["decision_id"] == planned["decision_id"]
+    assert holds[1]["path"] == "duplicate"
+    commit = app.verify_commit_paths(
+        paths=["auth/x.py"],
+        decision_id=planned["decision_id"],
+    )
+    assert commit["ok"] is True
+    assert commit["decision_id"] == planned["decision_id"]
+
+
+@pytest.mark.asyncio
 async def test_2_no_coverage_quorum_deny_names_decision(stage4_env: dict) -> None:
     scenario = StubScenario()
     scenario.on("model-a", vote_handler("deny"))

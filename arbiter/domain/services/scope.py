@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import fnmatch
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from arbiter.domain.errors import DomainError
 from arbiter.domain.services.classify import path_matches
+
+_PATH_KEYS = ("path", "file", "filepath", "target")
 
 
 def normalize_scope_patterns(patterns: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
@@ -55,3 +59,29 @@ def uncovered_paths(
     scope: list[str] | tuple[str, ...], paths: list[str]
 ) -> list[str]:
     return [p for p in paths if not scope_covers_path(scope, p)]
+
+
+def path_from_arguments(arguments: Mapping[str, Any] | None) -> str | None:
+    if not arguments:
+        return None
+    for key in _PATH_KEYS:
+        value = arguments.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().replace("\\", "/")
+    return None
+
+
+def covers(
+    scope: list[str] | tuple[str, ...],
+    *,
+    mcp_server_id: str = "",
+    tool_name: str = "",
+    paths: Sequence[str] = (),
+) -> bool:
+    """True if scope covers this ``server/tool`` and/or every given path."""
+    if (mcp_server_id or tool_name) and scope_covers(
+        scope, mcp_server_id, tool_name
+    ):
+        return True
+    path_list = [p for p in paths if isinstance(p, str) and p.strip()]
+    return bool(path_list) and not uncovered_paths(scope, path_list)

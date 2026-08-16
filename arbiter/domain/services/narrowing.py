@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from arbiter.domain.services.option_kind import ALLOW, DENY, ESCALATE, NARROW_PREFIX
+from arbiter.domain.services.scope import path_from_arguments
 
 # Call classes for which we cannot generate a useful narrowing set → stay binary.
 _BINARY_ONLY_TOOLS = frozenset(
@@ -38,7 +39,7 @@ def narrowing_candidates(
     # Shorter TTL — always available for intercepted writes.
     narrow.append(f"{NARROW_PREFIX}ttl=60")
     # Path subset when a path-like argument is present.
-    path = _first_path(args)
+    path = path_from_arguments(args)
     if path is not None:
         parent = _parent_glob(path)
         narrow.append(f"{NARROW_PREFIX}ttl=300;paths={parent}")
@@ -61,14 +62,6 @@ def narrowing_candidates(
 
 def binary_only_tool(tool_name: str) -> bool:
     return tool_name in _BINARY_ONLY_TOOLS
-
-
-def _first_path(args: Mapping[str, Any]) -> str | None:
-    for key in ("path", "file", "target", "filepath"):
-        value = args.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip().replace("\\", "/")
-    return None
 
 
 def _parent_glob(path: str) -> str:

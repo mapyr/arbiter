@@ -7,7 +7,7 @@ from typing import Any
 
 from arbiter.domain.events import BreakGlassUsed, CoverageChecked
 from arbiter.domain.services.classify import path_matches
-from arbiter.domain.services.scope import uncovered_paths
+from arbiter.domain.services.scope import covers, uncovered_paths
 from arbiter.domain.timeutil import format_iso, parse_iso
 
 
@@ -150,8 +150,8 @@ def _evaluate_decision(
         return False, list(paths), f"decision_not_allow:{decision_id}"
     if moment >= parse_iso(state.deadline):
         return False, list(paths), f"decision_expired:{decision_id}"
-    missing = uncovered_paths(state.scope, paths)
-    if missing:
+    if not covers(state.scope, paths=paths):
+        missing = uncovered_paths(state.scope, paths)
         return (
             False,
             missing,

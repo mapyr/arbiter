@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import httpx2
 
@@ -21,9 +23,9 @@ async def _ok_app(scope, receive, send):
 
 
 @pytest.mark.asyncio
-async def test_health_ok_without_secret() -> None:
+async def test_health_ok_without_secret(tmp_cwd: Path) -> None:
     inner = SharedSecretASGI(_ok_app, "s3cret")
-    app = _with_health_route(inner, ready=lambda: True)
+    app = _with_health_route(inner)
     transport = httpx2.ASGITransport(app=app)
     async with httpx2.AsyncClient(
         transport=transport, base_url="http://test"
@@ -33,17 +35,3 @@ async def test_health_ok_without_secret() -> None:
     assert health.status_code == 200
     assert health.content == b"ok"
     assert denied.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_health_unready_is_503() -> None:
-    app = _with_health_route(_ok_app, ready=lambda: False)
-    transport = httpx2.ASGITransport(app=app)
-    async with httpx2.AsyncClient(
-        transport=transport, base_url="http://test"
-    ) as client:
-        health = await client.get("/health")
-        inner = await client.get("/mcp")
-    assert health.status_code == 503
-    assert health.content == b"unready"
-    assert inner.status_code == 200

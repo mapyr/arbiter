@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-# Wrong hook for L3 (no commit message yet). Use commit-msg-arbiter.
-echo "arbiter: install scripts/git-hooks/commit-msg-arbiter as .git/hooks/commit-msg" >&2
-exit 0

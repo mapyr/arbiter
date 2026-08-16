@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -12,8 +13,6 @@ from arbiter.domain.model import Decision
 
 
 def _flock(fh: object, *, exclusive: bool) -> None:
-    import fcntl
-
     fcntl.flock(
         fh.fileno(),  # type: ignore[attr-defined]
         fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH,

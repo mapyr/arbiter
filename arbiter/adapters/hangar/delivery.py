@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import yaml
 
 from arbiter.adapters.hangar.config import parse_hangar_channel_config, refuse_start
 from arbiter.adapters.hangar.resolve_client import HttpApprovalResolver
-from arbiter.adapters.hangar.wiring import probe_request
 from arbiter.domain.services.intercept import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.bootstrap import create_application
@@ -85,21 +86,30 @@ class ArbiterApprovalDelivery:
                 logger.exception("arbiter_resolve_deny_failed")
 
     def prove_wired(self) -> str:
-        """Refuse start unless ``send``'s Z1 path lands ``hold.accepted``."""
+        """Refuse start unless Z1 ``hold.accepted`` lands in the ledger."""
         if self._app is None:
             raise DomainError("delivery app not configured")
-        request = probe_request()
-        held = self._to_held(request)
-        self._adjudicator.accept(held)
-        for raw in self._app.read_all_wire():
-            if (
-                raw.get("event") == HoldAccepted.TYPE
-                and raw.get("approval_id") == held.approval_id
-            ):
-                return held.approval_id
+        approval_id = f"wiring-{uuid.uuid4().hex}"
+        now = datetime.now(timezone.utc)
+        self._adjudicator.accept(
+            HeldCall(
+                approval_id=approval_id,
+                mcp_server_id="__arbiter_wiring__",
+                tool_name="probe",
+                arguments={"probe": True},
+                arguments_hash=hashlib.sha256(b'{"probe":true}').hexdigest(),
+                expires_at=now + timedelta(seconds=60),
+                requested_by="arbiter:wiring-probe",
+                correlation_id="wiring-probe",
+            )
+        )
+        if any(
+            raw.get("event") == HoldAccepted.TYPE and raw.get("approval_id") == approval_id
+            for raw in self._app.read_all_wire()
+        ):
+            return approval_id
         raise DomainError(
-            f"wiring probe failed: hold.accepted for {held.approval_id!r} "
-            "not in ledger"
+            f"wiring probe failed: hold.accepted for {approval_id!r} not in ledger"
         )
 
     def _to_held(self, request: Any) -> HeldCall:

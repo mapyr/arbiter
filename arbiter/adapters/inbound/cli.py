@@ -10,8 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from collections.abc import Callable
-
 from arbiter.adapters.inbound.mcp_server import create_server
 from arbiter.adapters.outbound.jsonl_event_store import ledger_writable
 from arbiter.application.services.commit_guard import extract_decision_id
@@ -19,20 +17,16 @@ from arbiter.bootstrap import create_application, data_root
 from arbiter.domain.errors import DomainError
 
 
-def _with_health_route(
-    app: object, *, ready: Callable[[], bool] | None = None
-) -> object:
+def _with_health_route(app: object) -> object:
     """ASGI wrapper: GET /health → 200/503; everything else → inner app.
 
     Stays outside the shared-secret wrapper so probes need no header.
     200 means the ledger path can be locked and fsynced (no event is written).
     """
 
-    check = ready or (lambda: True)
-
     async def asgi(scope, receive, send):  # type: ignore[no-untyped-def]
         if scope.get("type") == "http" and scope.get("path") == "/health":
-            ok = check()
+            ok = ledger_writable(data_root() / "ledger.jsonl")
             body = b"ok" if ok else b"unready"
             await send(
                 {
@@ -90,10 +84,7 @@ def serve(
                 file=sys.stderr,
             )
 
-        asgi_app = _with_health_route(
-            mcp_app,
-            ready=lambda: ledger_writable(data_root() / "ledger.jsonl"),
-        )
+        asgi_app = _with_health_route(mcp_app)
         uvicorn.run(asgi_app, host=host, port=port, log_level="info")
         return
     raise SystemExit(f"unsupported transport: {transport!r}")

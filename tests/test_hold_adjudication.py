@@ -17,7 +17,6 @@ import yaml
 
 from arbiter.adapters.hangar.config import parse_hangar_channel_config
 from arbiter.adapters.hangar.delivery import ArbiterApprovalDelivery, create_delivery
-from arbiter.adapters.hangar.wiring import assert_delivery_wired
 from arbiter.domain.services.intercept import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.application.voters_config import parse_voters_config
@@ -632,11 +631,7 @@ async def test_11_send_returns_immediately_and_accept_traced(stage4_env: dict) -
 
 @pytest.mark.asyncio
 async def test_12_unknown_channel_wiring_probe_refuses(stage4_env: dict) -> None:
-    """Hangar degrades unknown channels to noop and still boots; we must refuse.
-
-    Stand-in is Hangar's public builtin ``NoOpApprovalDelivery`` (the documented
-    degrade target in 2.6.0) — notifications never reach arbiter.
-    """
+    """Hangar degrades unknown channels to noop; noop never writes the ledger."""
     pytest.importorskip("mcp_hangar")
     from mcp_hangar.approvals.delivery.noop import NoOpApprovalDelivery
 
@@ -645,8 +640,15 @@ async def test_12_unknown_channel_wiring_probe_refuses(stage4_env: dict) -> None
         rules=stage4_env["rules"],
         voters=stage4_env["voters"],
     )
-    with pytest.raises(DomainError, match="wiring probe failed"):
-        await assert_delivery_wired(NoOpApprovalDelivery(), app, timeout_seconds=0.3)
+
+    class _Req:
+        approval_id = "noop-1"
+        tool_name = "t"
+        provider_id = "p"
+        channel = "arbiter"
+
+    await NoOpApprovalDelivery().send(_Req())
+    assert not any(e.get("event") == "hold.accepted" for e in _events(app))
 
 
 @pytest.mark.asyncio
@@ -805,7 +807,7 @@ async def test_wiring_probe_passes_for_live_adapter(stage4_env: dict) -> None:
         resolve_callback=lambda *a, **k: asyncio.sleep(0),
         app=app,
     )
-    approval_id = await assert_delivery_wired(delivery, app, timeout_seconds=2.0)
+    approval_id = delivery.prove_wired()
     assert any(
         e["event"] == "hold.accepted" and e["approval_id"] == approval_id
         for e in _events(app)

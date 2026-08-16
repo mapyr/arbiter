@@ -61,6 +61,19 @@ Backup: copy `$ARBITER_DATA_DIR/ledger.jsonl` and `bundles/`. Never hand-edit th
 
 Voter keys down → missing votes → deny (or shadow still proceeds). That is the product.
 
+## Catalog classes (existing two)
+
+Lab mockfs now exposes the two ledger predicates so `report-eval` can show
+`hold_precondition_share` / `hold_rule_share` instead of only quorum:
+
+- `mockfs/migrate.dry_run` then `mockfs/migrate.apply` with the **same**
+  `migration` string. Apply without a trial → `precondition_denied` (no quorum).
+- An allow with `establishes_rule: require_contract_test` (MCP `open_decision`
+  / `ensure_plan`), then `mockfs/contract_test`, then a write under that glob
+  → `rule_allow`; write without the test → `rule_deny`.
+
+Do not add a third class until those shares move. Compose stays shadow.
+
 Break-glass: one process `ARBITER_BREAK_GLASS=1`; later commits need
 `ARBITER_ALLOW_BREAK_GLASS=1` or they fail L3.
 

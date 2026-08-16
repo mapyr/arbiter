@@ -49,5 +49,23 @@ def read_note(path: str) -> str:
     return _NOTES[path]
 
 
+@server.tool(name="migrate.dry_run")
+def migrate_dry_run(migration: str) -> str:
+    """Trial a named migration (held). Same ``migration`` as apply."""
+    return f"ok: dry_run {migration}"
+
+
+@server.tool(name="migrate.apply")
+def migrate_apply(migration: str) -> str:
+    """Apply a named migration (held). Ledger requires a matching dry_run."""
+    return f"ok: apply {migration}"
+
+
+@server.tool()
+def contract_test(path: str) -> str:
+    """Record a contract test for ``path`` (held). Satisfies require_contract_test."""
+    return f"ok: contract_test {path}"
+
+
 if __name__ == "__main__":
     asyncio.run(server.run_stdio_async())

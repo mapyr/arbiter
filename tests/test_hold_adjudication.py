@@ -302,6 +302,37 @@ async def test_plan_allow_covers_hold_on_path(stage4_env: dict) -> None:
 
 
 @pytest.mark.asyncio
+async def test_lab_migrate_apply_denied_without_trial(stage4_env: dict) -> None:
+    _write_intercept(
+        stage4_env["intercept"], [{"mcp_server": "mockfs", "tool": "*"}]
+    )
+    app = create_application(
+        root=stage4_env["data"],
+        rules=stage4_env["rules"],
+        voters=stage4_env["voters"],
+    )
+    harness = HoldHarness(
+        create_delivery_for_tests(
+            adjudicator=_adj(app, stage4_env["intercept"]),
+            resolve_callback=lambda *a, **k: asyncio.sleep(0),
+            app=app,
+        )
+    )
+    approved, reason = await harness.run(
+        FakeApprovalRequest(
+            approval_id="mig-1",
+            mcp_server_id="mockfs",
+            tool_name="migrate.apply",
+            arguments={"migration": "001_init"},
+        )
+    )
+    assert approved is False
+    holds = [e for e in _events(app) if e["event"] == "hold.adjudicated"]
+    assert holds[0]["path"] == "precondition_denied"
+    assert "precondition" in reason
+
+
+@pytest.mark.asyncio
 async def test_2_no_coverage_quorum_deny_names_decision(stage4_env: dict) -> None:
     scenario = StubScenario()
     scenario.on("model-a", vote_handler("deny"))

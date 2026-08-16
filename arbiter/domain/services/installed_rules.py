@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from arbiter.domain.services.classify import path_matches
+from arbiter.domain.services.scope import path_from_arguments
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,7 @@ def check_installed_rules(
     ``require_contract_test``: writes under path_glob need a prior
     ``hold.adjudicated`` / evidence marker for a contract test with approved=True.
     """
-    path = _path_from_args(arguments)
+    path = path_from_arguments(arguments)
     if path is None:
         return RuleCheckResult(
             ok=True, path="no_rule", rule_id=None, reason="no_path_argument"
@@ -109,19 +110,21 @@ def check_installed_rules(
     )
 
 
-def _path_from_args(arguments: Mapping[str, Any]) -> str | None:
-    for key in ("path", "file", "filepath", "target"):
-        value = arguments.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip().replace("\\", "/")
-    return None
-
-
 def _looks_like_write(tool_name: str) -> bool:
     lower = tool_name.lower()
     return any(
         token in lower
-        for token in ("write", "edit", "apply", "patch", "create", "delete", "migrate")
+        for token in (
+            "write",
+            "edit",
+            "apply",
+            "patch",
+            "create",
+            "delete",
+            "migrate",
+            "append",
+            "rename",
+        )
     )
 
 

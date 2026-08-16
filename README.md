@@ -90,7 +90,7 @@ Missing or invalid rules → **everything is critical** (fail-closed).
 
 | Tool | Role |
 |------|------|
-| `open_decision` | Open a decision; optional `scope` for later coverage |
+| `open_decision` | Open a decision; optional `scope` / `depends_on` / `establishes_rule` |
 | `get_gate_policy` | Client plan policy (`session` \| `on_uncovered`) |
 | `ensure_plan` | Validate plan → open → model quorum (covering allow) |
 | `cast_vote` | Immutable vote (`round` defaults to 1) |

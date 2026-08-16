@@ -92,6 +92,7 @@ def test_covers_path_or_call_ref() -> None:
         is True
     )
     assert path_from_arguments({"path": "auth/x.py"}) == "auth/x.py"
+    assert path_from_arguments({"src": "notes/a"}) == "notes/a"
     assert path_from_arguments({"title": "hi"}) is None
 
 

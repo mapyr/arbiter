@@ -9,7 +9,7 @@ from typing import Any
 from arbiter.domain.errors import DomainError
 from arbiter.domain.services.classify import path_matches
 
-_PATH_KEYS = ("path", "file", "filepath", "target")
+_PATH_KEYS = ("path", "file", "filepath", "target", "src")
 
 
 def normalize_scope_patterns(patterns: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:

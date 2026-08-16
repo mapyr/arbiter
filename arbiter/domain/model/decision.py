@@ -17,8 +17,6 @@ from arbiter.domain.events import (
     DecisionInvalidated,
     HoldAccepted,
     HoldAdjudicated,
-    ProbeCompleted,
-    ProbeRequested,
     QuorumRound2Opened,
     RuleEstablished,
     VoteCast,
@@ -58,7 +56,6 @@ class Decision:
     failures: list[dict[str, Any]] = field(default_factory=list)
     reveal_labels: dict[str, str] | None = None
     resolution: dict[str, Any] | None = None
-    probes: list[dict[str, Any]] = field(default_factory=list)
 
     def highest_round(self) -> int:
         return max(self.rounds) if self.rounds else 0
@@ -120,20 +117,6 @@ class Decision:
         if isinstance(event, DecisionInvalidated):
             if event.decision_id == state.decision_id:
                 state.invalidated = True
-            return state
-        if isinstance(event, (ProbeRequested, ProbeCompleted)):
-            if isinstance(event, ProbeCompleted):
-                state.probes.append(
-                    {
-                        "voter": event.voter,
-                        "round": event.round,
-                        "probe": event.probe,
-                        "params": dict(event.params),
-                        "result_sha256": event.result_sha256,
-                        "result_text": event.result_text,
-                        "truncated": event.truncated,
-                    }
-                )
             return state
         if isinstance(event, VoteCast):
             vote: dict[str, Any] = {

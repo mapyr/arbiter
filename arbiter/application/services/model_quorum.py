@@ -11,10 +11,6 @@ from typing import Any
 
 from arbiter.application.handlers.commands import CommandHandlers
 from arbiter.application.ports import Clock, EvidenceStore, EventStore, ResponseStore, VoterGateway
-from arbiter.application.services.probe_executor import (
-    ProbeExecutor,
-    material_probe_rows,
-)
 from arbiter.application.services.prompts import (
     build_blind_prompt,
     build_reveal_prompt,
@@ -24,17 +20,8 @@ from arbiter.application.services.prompts import (
 from arbiter.application.voters_config import VotersConfig
 from arbiter.domain.errors import DomainError
 from arbiter.domain.events import BaselineVerdict
-from arbiter.domain.services.probes import (
-    MAX_PROBES_PER_VOTER_PER_ROUND,
-    compose_material,
-    parse_probe_request,
-)
 from arbiter.domain.services.quorum import resolve
 from arbiter.domain.timeutil import format_iso, parse_iso
-import json
-import re
-
-_JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 
 
 @dataclass
@@ -76,8 +63,6 @@ class ModelQuorumService:
     clock: Clock
     config: VotersConfig
     rng: random.Random = field(default_factory=random.Random)
-    probes: ProbeExecutor | None = None
-    changed_paths: list[str] = field(default_factory=list)
 
     async def run(self, decision_id: str) -> dict[str, Any]:
         state = self.events.load_decision(decision_id)
@@ -225,14 +210,6 @@ class ModelQuorumService:
         gathered = await asyncio.gather(*[one(v.id) for v in self.config.voters])
         return {vid: vote for vid, vote in gathered if vote is not None}
 
-    def _evidence_for_prompt(self, decision_id: str, base: dict[str, Any]) -> dict[str, Any]:
-        if self.probes is None or not (self.probes.enabled or self.probes.replay_only):
-            return base
-        stored = self.probes.stored_results(decision_id)
-        if not stored:
-            return base
-        return compose_material(base, material_probe_rows(stored))
-
     async def _collect_vote(
         self,
         *,
@@ -249,55 +226,40 @@ class ModelQuorumService:
         prior_by_voter: dict[str, dict[str, Any]] | None,
     ) -> dict[str, Any] | None:
         spec = self.config.by_id(voter_id)
-        # Probe loop: requests are not votes and do not extend the outer deadline.
-        for _probe_turn in range(MAX_PROBES_PER_VOTER_PER_ROUND + 1):
-            material = self._evidence_for_prompt(decision_id, evidence)
-            if round_n == 1:
-                prompt = build_blind_prompt(
-                    question=question, options=state_options, evidence=material
-                )
-            else:
-                assert prior_by_voter is not None and labeled_by_voter is not None
-                prompt = build_reveal_prompt(
-                    question=question,
-                    options=state_options,
-                    evidence=material,
-                    labeled_votes=labeled_by_voter[voter_id],
-                    own_prior=prior_by_voter[voter_id],
-                )
-            p_hash = prompt_sha256(prompt)
-            prompts_out[voter_id] = p_hash
-            api_key = os.environ.get(spec.api_key_env) if spec.api_key_env else None
-            messages = [{"role": "user", "content": prompt}]
-            prior = prior_by_voter[voter_id] if prior_by_voter else None
-            prior_option = prior["option"] if prior is not None else None
-            last_error = "invalid_response"
-            voted = await self._vote_attempts(
-                voter_id=voter_id,
-                decision_id=decision_id,
-                round_n=round_n,
-                state_options=state_options,
-                bundle_sha256=bundle_sha256,
-                latencies=latencies,
-                messages=messages,
-                prompt=prompt,
-                p_hash=p_hash,
-                spec=spec,
-                api_key=api_key,
-                prior_option=prior_option,
-                last_error=last_error,
+        if round_n == 1:
+            prompt = build_blind_prompt(
+                question=question, options=state_options, evidence=evidence
             )
-            if voted is not None and voted.get("_probe"):
-                continue  # re-prompt with enriched material; deadline unchanged
-            return voted
-
-        self.commands.record_vote_failed(
+        else:
+            assert prior_by_voter is not None and labeled_by_voter is not None
+            prompt = build_reveal_prompt(
+                question=question,
+                options=state_options,
+                evidence=evidence,
+                labeled_votes=labeled_by_voter[voter_id],
+                own_prior=prior_by_voter[voter_id],
+            )
+        p_hash = prompt_sha256(prompt)
+        prompts_out[voter_id] = p_hash
+        api_key = os.environ.get(spec.api_key_env) if spec.api_key_env else None
+        messages = [{"role": "user", "content": prompt}]
+        prior = prior_by_voter[voter_id] if prior_by_voter else None
+        prior_option = prior["option"] if prior is not None else None
+        return await self._vote_attempts(
+            voter_id=voter_id,
             decision_id=decision_id,
-            voter=voter_id,
-            round=round_n,
-            reason="probe_budget_without_vote",
+            round_n=round_n,
+            state_options=state_options,
+            bundle_sha256=bundle_sha256,
+            latencies=latencies,
+            messages=messages,
+            prompt=prompt,
+            p_hash=p_hash,
+            spec=spec,
+            api_key=api_key,
+            prior_option=prior_option,
+            last_error="invalid_response",
         )
-        return None
 
     async def _vote_attempts(
         self,
@@ -389,38 +351,6 @@ class ModelQuorumService:
                     meta=meta,
                 )
                 return None
-
-            # Probe request (not a vote) — only when probes enabled.
-            if self.probes is not None and (
-                self.probes.enabled or self.probes.replay_only
-            ):
-                probe_payload = _load_json_object(completion.text)
-                if (
-                    isinstance(probe_payload, dict)
-                    and "probe" in probe_payload
-                    and "option" not in probe_payload
-                ):
-                    parsed_probe = parse_probe_request(
-                        probe_payload,
-                        voter=voter_id,
-                        round_n=round_n,
-                        changed_paths=self.changed_paths,
-                    )
-                    if isinstance(parsed_probe, str):
-                        last_error = parsed_probe
-                        if attempt == 0:
-                            continue
-                        self.commands.record_vote_failed(
-                            decision_id=decision_id,
-                            voter=voter_id,
-                            round=round_n,
-                            reason="invalid_probe",
-                            detail=parsed_probe,
-                            meta=meta,
-                        )
-                        return None
-                    self.probes.run(decision_id, parsed_probe)
-                    return {"_probe": True}
 
             parsed = parse_vote_response(
                 completion.text,
@@ -595,17 +525,3 @@ class ModelQuorumService:
             "prompt_sha256": dict(prompts_r1),
             "latency": {vid: bucket.report() for vid, bucket in latencies.items()},
         }
-
-
-def _load_json_object(text: str) -> Any:
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        match = _JSON_OBJECT.search(text)
-        if not match:
-            return None
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None

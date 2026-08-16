@@ -12,12 +12,6 @@ from arbiter.domain.services.dependencies import assert_no_cycle, cascade_invali
 from arbiter.domain.services.narrowing import narrowing_candidates
 from arbiter.domain.services.option_kind import option_kind
 from arbiter.domain.services.preconditions import check_preconditions
-from arbiter.domain.services.probes import (
-    compose_material,
-    material_sha256,
-    parse_probe_request,
-    truncate_probe_result,
-)
 from arbiter.domain.services.quorum import resolve
 from tests.ladder.harness import (
     close_ladder_env,
@@ -25,7 +19,6 @@ from tests.ladder.harness import (
     run_s1,
     run_s2,
     run_s3,
-    run_s4_ab,
     run_s5,
     run_s6,
     unanimous,
@@ -82,9 +75,12 @@ async def test_ladder_full_climb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert results["S3"]["narrow_replaced_deny"] is True
     assert results["S3"]["narrow_approved"] is True
 
-    # --- S4 A/B ---
-    results["S4"] = await run_s4_ab(tmp_path / "s4", monkeypatch)
-    assert results["S4"]["replay_uses_stored"] is True
+    # --- S4 already cut (no verdict gain vs cost) ---
+    results["S4"] = {
+        "cut": True,
+        "reason": "no verdict gain (A/B); removed",
+        "recommend_cut": True,
+    }
 
     # --- S5 ---
     env = await open_ladder_env(tmp_path / "s5", monkeypatch, unanimous("allow"))
@@ -184,25 +180,6 @@ def test_invariant_model_cannot_invent_narrow_value() -> None:
     # Closed set only — free-form values are not generated
     assert all(isinstance(o, str) for o in opts)
     assert "allow_narrow:ttl=999999" not in opts or "ttl=999999" in str(opts)
-
-
-def test_invariant_probe_truncate_and_material_hash() -> None:
-    big = "x" * 10_000
-    clipped = truncate_probe_result(big)
-    assert len(clipped.encode()) <= 2100
-    base = {"a": 1}
-    probes = [{"probe": "show_file", "params": {"path": "a"}, "result_text": "hi"}]
-    h1 = material_sha256(base, probes)
-    h2 = material_sha256(base, probes)
-    assert h1 == h2
-    assert compose_material(base, probes)["probes"][0]["result_text"] == "hi"
-
-
-def test_invariant_probe_closed_catalog() -> None:
-    err = parse_probe_request(
-        {"probe": "run_shell", "params": {}}, voter="v", round_n=1
-    )
-    assert isinstance(err, str)
 
 
 def test_invariant_dependency_cycle() -> None:

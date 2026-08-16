@@ -414,7 +414,6 @@ Complexity should live in the **decision object**, not harder voting.
 |---------|-----------|---------|
 | Preconditions | e.g. `migrate.apply` only if ledger has matching trial/dry-run hash | on in hold path |
 | Narrowing | options include `allow_narrow:ttl=…;paths=…` — model **picks from list** | on |
-| Evidence probes | closed catalog of probes | off (flag; A/B showed no gain) |
 | Dependencies | `depends_on` at open; cascade invalidation; cycle → refuse | on |
 | Installed rules | `establishes_rule`; runtime enforces before quorum; `escalate_to_human` does not pass | on |
 
@@ -465,7 +464,7 @@ decisions/
 Example ledger events: `decision.opened`, `vote.cast`, `vote.failed`,
 `decision.resolved`, `hold.accepted`, `hold.adjudicated`, `coverage.checked`,
 `baseline.verdict`, `break_glass.used`, `rule.established`,
-`decision.invalidated`, `probe.*` (usually off).
+`decision.invalidated`.
 
 **Never** hand-edit `ledger.jsonl` — replayability depends on append-only + hashes.
 

@@ -12,8 +12,8 @@ from typing import Any
 
 import yaml
 
+from arbiter.application.intercept_rules import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
-from arbiter.application.services.probe_executor import ProbeExecutor
 from arbiter.bootstrap import create_application
 from arbiter.domain.services.narrowing import narrowing_candidates
 from arbiter.domain.services.option_kind import ALLOW, DENY, ESCALATE, NARROW_PREFIX
@@ -117,7 +117,6 @@ class LadderEnv:
     adj: HoldAdjudicator
     scenario: StubScenario
     stub: StubServer
-    probes: ProbeExecutor | None = None
     samples: dict[str, list[Any]] = field(default_factory=dict)
 
     def note(self, key: str, value: Any) -> None:
@@ -147,7 +146,6 @@ async def open_ladder_env(
     *,
     enable_narrowing: bool = False,
     include_escalate: bool = False,
-    probes_enabled: bool = False,
 ) -> LadderEnv:
     data = tmp_path / "decisions"
     data.mkdir(parents=True, exist_ok=True)
@@ -166,22 +164,13 @@ async def open_ladder_env(
     await stub.__aenter__()
     write_voters(voters, stub.base_url, baseline=True)
     app = create_application(root=data, rules=rules, voters=voters)
-    adj = HoldAdjudicator.from_intercept_raw(
+    adj = HoldAdjudicator(
         app,
-        yaml.safe_load(intercept.read_text()),
+        intercept=parse_intercept_rules(yaml.safe_load(intercept.read_text())),
         resolver_principal=PRINCIPAL,
         min_round_seconds=1.0,
         enable_narrowing=enable_narrowing,
         include_escalate=include_escalate,
-    )
-    probes = ProbeExecutor(
-        commands=app.commands,
-        events=app._events,  # noqa: SLF001 — test harness
-        clock=app._clock,  # noqa: SLF001
-        file_contents={"src/a.py": "print('ok')\n" * 20},
-        test_summary="3 passed, 0 failed",
-        path_histories={"src/a.py": "commit1\ncommit2"},
-        enabled=probes_enabled,
     )
     return LadderEnv(
         cwd=tmp_path,
@@ -193,7 +182,6 @@ async def open_ladder_env(
         adj=adj,
         scenario=scenario,
         stub=stub,
-        probes=probes,
     )
 
 
@@ -440,136 +428,6 @@ async def run_s3(env: LadderEnv) -> dict[str, Any]:
     }
 
 
-async def run_s4_ab(tmp_path: Path, monkeypatch: Any) -> dict[str, Any]:
-    """A/B same decisions with probes on vs off."""
-
-    async def _one(enabled: bool, root: Path) -> dict[str, Any]:
-        # Probe then vote — handler sequence per model
-        from tests.openai_stub import text_handler
-
-        scenario = StubScenario()
-        probe_json = json.dumps(
-            {"probe": "show_file", "params": {"path": "src/a.py"}}
-        )
-        vote = vote_handler("allow")
-        for model in ("model-a", "model-b", "model-c"):
-            if enabled:
-                scenario.on(model, text_handler(probe_json), vote)
-            else:
-                scenario.on(model, vote)
-        env = await open_ladder_env(
-            root, monkeypatch, scenario, probes_enabled=enabled
-        )
-        try:
-            opened = env.app.open_decision(
-                question="Allow write after inspecting file?",
-                options=["allow", "deny"],
-                voters=["voter-1", "voter-2", "voter-3"],
-                evidence={
-                    "observation": {
-                        "tool_name": "write_file",
-                        "changed_paths": ["src/a.py"],
-                    }
-                },
-                criticality="critical",
-                ttl_seconds=120,
-            )
-            resolved = await env.app.run_model_quorum(
-                opened["decision_id"],
-                rng=random.Random(1),
-                probes=env.probes,
-                changed_paths=["src/a.py"],
-            )
-            cost = collect_cost_time(env.app)
-            probes_n = sum(
-                1
-                for e in env.app.read_all_wire()
-                if e.get("event") == "probe.completed"
-            )
-            return {
-                "verdict": resolved.get("verdict"),
-                "chosen_option": resolved.get("chosen_option"),
-                "probes": probes_n,
-                "executions": env.probes.executions if env.probes else 0,
-                "cost_time": cost,
-                "prompt_hashes": _prompt_hashes(env.app, opened["decision_id"]),
-            }
-        finally:
-            await close_ladder_env(env)
-
-    off = await _one(False, tmp_path / "s4-off")
-    on = await _one(True, tmp_path / "s4-on")
-
-    # Replay: stored probes, zero re-exec
-    scenario = StubScenario()
-    for model in ("model-a", "model-b", "model-c"):
-        scenario.on(model, vote_handler("allow"))
-    env = await open_ladder_env(tmp_path / "s4-replay", monkeypatch, scenario)
-    try:
-        # Manually seed stored probe + open with same base evidence shape
-        from arbiter.domain.events import ProbeCompleted
-        from arbiter.domain.services.probes import probe_result_digest
-        from arbiter.domain.timeutil import format_iso
-
-        opened = env.app.open_decision(
-            question="replay?",
-            options=["allow", "deny"],
-            voters=["voter-1", "voter-2", "voter-3"],
-            evidence={"observation": {"tool_name": "write_file"}},
-            criticality="critical",
-            ttl_seconds=60,
-        )
-        text = "print('ok')\n"
-        env.app.commands.record_probe_completed(
-            ProbeCompleted(
-                at=format_iso(env.app.now()),
-                decision_id=opened["decision_id"],
-                voter="voter-1",
-                round=1,
-                probe="show_file",
-                params={"path": "src/a.py"},
-                result_sha256=probe_result_digest(text),
-                result_text=text,
-                truncated=False,
-            )
-        )
-        assert env.probes is not None
-        env.probes.replay_only = True
-        env.probes.enabled = False
-        before = env.probes.executions
-        stored = env.probes.stored_results(opened["decision_id"])
-        assert stored and stored[0]["result_text"] == text
-        # Attempting run in replay_only without matching new request uses stored
-        assert env.probes.executions == before
-        replay_ok = True
-    finally:
-        await close_ladder_env(env)
-
-    same_verdict = off["verdict"] == on["verdict"] and off["chosen_option"] == on[
-        "chosen_option"
-    ]
-    cost_up = (on["cost_time"]["prompt_tokens"]["sum"] or 0) > (
-        off["cost_time"]["prompt_tokens"]["sum"] or 0
-    ) or (on["probes"] > 0 and off["probes"] == 0)
-    return {
-        "without_probes": off,
-        "with_probes": on,
-        "same_verdict": same_verdict,
-        "cost_increased": cost_up,
-        "recommend_cut": same_verdict and cost_up,
-        "replay_uses_stored": replay_ok,
-    }
-
-
-def _prompt_hashes(app: Any, decision_id: str) -> list[str]:
-    out: list[str] = []
-    for raw in app.read_all_wire():
-        if raw.get("event") == "vote.cast" and raw.get("decision_id") == decision_id:
-            if raw.get("prompt_sha256"):
-                out.append(raw["prompt_sha256"])
-    return out
-
-
 async def run_s5(env: LadderEnv) -> dict[str, Any]:
     # Parent allow
     parent = env.app.open_decision(
@@ -719,9 +577,9 @@ async def run_s6(env: LadderEnv) -> dict[str, Any]:
 
     # Escalation never passes
     _reset_unanimous(env.scenario, ESCALATE)
-    adj_esc = HoldAdjudicator.from_intercept_raw(
+    adj_esc = HoldAdjudicator(
         env.app,
-        yaml.safe_load(env.intercept.read_text()),
+        intercept=parse_intercept_rules(yaml.safe_load(env.intercept.read_text())),
         resolver_principal=PRINCIPAL,
         min_round_seconds=1.0,
         enable_narrowing=False,

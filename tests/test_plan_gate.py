@@ -43,11 +43,12 @@ def test_parse_client_gate_defaults_and_modes() -> None:
     assert parse_client_gate({"client_gate": {"plan": {"mode": "session"}}})[
         "plan"
     ]["mode"] == "session"
-    assert parse_client_gate(
-        {"client_gate": {"plan": {"mode": "on_uncovered   # or session"}}}
-    )["plan"]["mode"] == "on_uncovered"
     with pytest.raises(DomainError, match="mode"):
         parse_client_gate({"client_gate": {"plan": {"mode": "always"}}})
+    with pytest.raises(DomainError, match="mode"):
+        parse_client_gate(
+            {"client_gate": {"plan": {"mode": "on_uncovered   # or session"}}}
+        )
 
 
 def test_get_gate_policy_from_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

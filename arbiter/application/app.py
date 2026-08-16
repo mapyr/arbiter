@@ -100,14 +100,14 @@ class Application:
         return self._rules.load()
 
     def get_gate_policy(self) -> dict[str, Any]:
-        from arbiter.application.services.plan_gate import PlanGateService
+        from arbiter.application.services.plan_gate import get_gate_policy as _policy
 
-        return PlanGateService(self).get_gate_policy()
+        return _policy(self)
 
     async def ensure_plan(self, plan: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
-        from arbiter.application.services.plan_gate import PlanGateService
+        from arbiter.application.services.plan_gate import ensure_plan as _ensure
 
-        return await PlanGateService(self).ensure_plan(plan, **kwargs)
+        return await _ensure(self, plan, **kwargs)
 
     def now(self) -> datetime:
         return self._clock.now()
@@ -119,18 +119,18 @@ class Application:
         return self._events.load_decision(decision_id)
 
     def check_coverage(self, **kwargs: Any) -> dict[str, Any]:
-        from arbiter.application.services.coverage import CoverageService
+        from arbiter.application.services.coverage import check_coverage as _check
 
-        return CoverageService(self, rules=self._rules.load()).check(**kwargs)
+        return _check(self, rules=self._rules.load(), **kwargs)
 
     def eval_report(
         self, *, repo: Path | None = None, horizon_days: int = 14
     ) -> dict[str, Any]:
-        from arbiter.application.services.eval_report import EvalReportBuilder
+        from arbiter.application.services.eval_report import build_eval_report
 
-        return EvalReportBuilder(
+        return build_eval_report(
             self, repo=repo or self.root, horizon_days=horizon_days
-        ).build()
+        )
 
     def verify_commit_paths(
         self,
@@ -163,8 +163,6 @@ class Application:
         *,
         config: VotersConfig | None = None,
         rng: random.Random | None = None,
-        probes: Any | None = None,
-        changed_paths: list[str] | None = None,
     ) -> dict[str, Any]:
         cfg = config if config is not None else self._voters_config.load()
         if cfg is None:
@@ -183,7 +181,5 @@ class Application:
             clock=self._clock,
             config=cfg,
             rng=rng or random.Random(),
-            probes=probes,
-            changed_paths=list(changed_paths or []),
         )
         return await service.run(decision_id)

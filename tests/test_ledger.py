@@ -7,14 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from arbiter.canonical import bundle_sha256
-from arbiter.ledger import Ledger, LedgerError
+from arbiter.application.app import Application
+from arbiter.bootstrap import create_application
+from arbiter.domain.errors import DomainError
+from arbiter.domain.services.canonical import bundle_sha256
 
 
 ROUTINE_EVIDENCE = {"paths": ["docs/readme.md"], "note": "safe"}
 
 
-def _open_routine(ledger: Ledger, **kwargs):
+def _open_routine(ledger: Application, **kwargs):
     defaults = dict(
         question="Ship the change?",
         options=["opt-a", "opt-b", "opt-c"],
@@ -32,7 +34,7 @@ def test_canonical_key_order_stable_hash() -> None:
     assert bundle_sha256(a) == bundle_sha256(b)
 
 
-def test_full_happy_path_five_ledger_lines(ledger: Ledger) -> None:
+def test_full_happy_path_five_ledger_lines(ledger: Application) -> None:
     opened = _open_routine(ledger)
     digest = opened["bundle_sha256"]
     assert opened["criticality"] == "routine"
@@ -66,9 +68,9 @@ def test_full_happy_path_five_ledger_lines(ledger: Ledger) -> None:
     ]
 
 
-def test_R1_closed_option_set(ledger: Ledger) -> None:
+def test_R1_closed_option_set(ledger: Application) -> None:
     opened = _open_routine(ledger)
-    with pytest.raises(LedgerError) as exc:
+    with pytest.raises(DomainError) as exc:
         ledger.cast_vote(
             decision_id=opened["decision_id"],
             voter="voter-1",
@@ -82,7 +84,7 @@ def test_R1_closed_option_set(ledger: Ledger) -> None:
     assert "opt-a" in msg and "opt-b" in msg and "opt-c" in msg
 
 
-def test_R2_vote_immutable(ledger: Ledger) -> None:
+def test_R2_vote_immutable(ledger: Application) -> None:
     opened = _open_routine(ledger)
     kwargs = dict(
         decision_id=opened["decision_id"],
@@ -93,13 +95,13 @@ def test_R2_vote_immutable(ledger: Ledger) -> None:
         bundle_sha256_hex=opened["bundle_sha256"],
     )
     ledger.cast_vote(**kwargs)
-    with pytest.raises(LedgerError, match="immutable"):
+    with pytest.raises(DomainError, match="immutable"):
         ledger.cast_vote(**{**kwargs, "option": "opt-b"})
 
 
-def test_R3_closed_roster(ledger: Ledger) -> None:
+def test_R3_closed_roster(ledger: Application) -> None:
     opened = _open_routine(ledger)
-    with pytest.raises(LedgerError, match="not in roster"):
+    with pytest.raises(DomainError, match="not in roster"):
         ledger.cast_vote(
             decision_id=opened["decision_id"],
             voter="stranger",
@@ -110,7 +112,7 @@ def test_R3_closed_roster(ledger: Ledger) -> None:
         )
 
 
-def test_R4_critical_requires_unanimity(ledger: Ledger) -> None:
+def test_R4_critical_requires_unanimity(ledger: Application) -> None:
     opened = ledger.open_decision(
         question="Touch auth?",
         options=["opt-a", "opt-b"],
@@ -149,7 +151,7 @@ def test_R4_critical_requires_unanimity(ledger: Ledger) -> None:
     assert {"voter": "voter-3", "option": "opt-b"} in result["dissent"]
 
 
-def test_R4_routine_majority_and_tie(ledger: Ledger) -> None:
+def test_R4_routine_majority_and_tie(ledger: Application) -> None:
     opened = _open_routine(ledger)
     digest = opened["bundle_sha256"]
     ledger.cast_vote(
@@ -198,7 +200,7 @@ def test_R4_routine_majority_and_tie(ledger: Ledger) -> None:
     assert tied["reason"] == "quorum_not_met"
 
 
-def test_R5_incompleteness_is_deny(ledger: Ledger) -> None:
+def test_R5_incompleteness_is_deny(ledger: Application) -> None:
     opened = _open_routine(ledger)
     ledger.cast_vote(
         decision_id=opened["decision_id"],
@@ -220,9 +222,9 @@ def test_R5_incompleteness_is_deny(ledger: Ledger) -> None:
     assert unknown["quorum"]["missing"]
 
 
-def test_R6_bundle_mismatch(ledger: Ledger) -> None:
+def test_R6_bundle_mismatch(ledger: Application) -> None:
     opened = _open_routine(ledger)
-    with pytest.raises(LedgerError, match="bundle_sha256 mismatch"):
+    with pytest.raises(DomainError, match="bundle_sha256 mismatch"):
         ledger.cast_vote(
             decision_id=opened["decision_id"],
             voter="voter-1",
@@ -233,7 +235,7 @@ def test_R6_bundle_mismatch(ledger: Ledger) -> None:
         )
 
 
-def test_R7_deadline_evaluated_at_read(ledger: Ledger) -> None:
+def test_R7_deadline_evaluated_at_read(ledger: Application) -> None:
     opened = _open_routine(ledger, ttl_seconds=0)
     ledger.cast_vote(
         decision_id=opened["decision_id"],
@@ -253,7 +255,7 @@ def test_R7_deadline_evaluated_at_read(ledger: Ledger) -> None:
     assert view["deadline_passed"] is True
 
 
-def test_R8_denial_names_the_gap(ledger: Ledger) -> None:
+def test_R8_denial_names_the_gap(ledger: Application) -> None:
     opened = _open_routine(ledger)
     result = ledger.resolve_decision(opened["decision_id"])
     assert result["verdict"] == "deny"
@@ -261,7 +263,7 @@ def test_R8_denial_names_the_gap(ledger: Ledger) -> None:
     assert result["quorum"]["missing"] == ["voter-1", "voter-2", "voter-3"]
 
 
-def test_resolve_idempotent(ledger: Ledger) -> None:
+def test_resolve_idempotent(ledger: Application) -> None:
     opened = _open_routine(ledger)
     digest = opened["bundle_sha256"]
     for voter in opened["voters"]:
@@ -291,7 +293,7 @@ def test_resolve_idempotent(ledger: Ledger) -> None:
 def test_replay_after_new_process(tmp_cwd: Path) -> None:
     root = tmp_cwd / "decisions"
     rules = tmp_cwd / "arbiter.rules.yaml"
-    first = Ledger(root=root, rules_path=rules)
+    first = create_application(root=root, rules=rules)
     opened = _open_routine(first)
     digest = opened["bundle_sha256"]
     first.cast_vote(
@@ -304,7 +306,7 @@ def test_replay_after_new_process(tmp_cwd: Path) -> None:
     )
     snapshot = first.get_decision(opened["decision_id"])
 
-    second = Ledger(root=root, rules_path=rules)
+    second = create_application(root=root, rules=rules)
     restored = second.get_decision(opened["decision_id"])
     assert restored["decision_id"] == snapshot["decision_id"]
     assert restored["votes"] == snapshot["votes"]
@@ -312,7 +314,7 @@ def test_replay_after_new_process(tmp_cwd: Path) -> None:
     assert restored["status"] == "open"
 
 
-def test_caller_cannot_demote_critical(ledger: Ledger) -> None:
+def test_caller_cannot_demote_critical(ledger: Application) -> None:
     opened = ledger.open_decision(
         question="Auth change?",
         options=["yes", "no"],
@@ -326,7 +328,7 @@ def test_caller_cannot_demote_critical(ledger: Ledger) -> None:
     assert state.criticality_source == "classifier"
 
 
-def test_caller_can_escalate_routine(ledger: Ledger) -> None:
+def test_caller_can_escalate_routine(ledger: Application) -> None:
     opened = ledger.open_decision(
         question="Docs only?",
         options=["yes", "no"],
@@ -340,7 +342,7 @@ def test_caller_can_escalate_routine(ledger: Ledger) -> None:
     assert state.criticality_source == "caller_escalated"
 
 
-def test_bundle_stored_beside_ledger(ledger: Ledger) -> None:
+def test_bundle_stored_beside_ledger(ledger: Application) -> None:
     opened = _open_routine(ledger)
     path = ledger.bundles_dir / f"{opened['bundle_sha256']}.json"
     assert path.is_file()

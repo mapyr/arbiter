@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from arbiter.quorum import majority_threshold, resolve
+from arbiter.domain.services.quorum import majority_threshold, resolve
 
 
 def test_majority_threshold_values() -> None:

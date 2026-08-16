@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from arbiter.ledger import Ledger
-from arbiter.server import create_server
+from arbiter.adapters.inbound.mcp_server import create_server
+from arbiter.application.app import Application
+from arbiter.bootstrap import create_application
 
 
 @pytest.fixture
@@ -28,15 +29,15 @@ def tmp_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def ledger(tmp_cwd: Path) -> Ledger:
-    return Ledger(
+def ledger(tmp_cwd: Path) -> Application:
+    return create_application(
         root=Path(tmp_cwd) / "decisions",
-        rules_path=Path(tmp_cwd) / "arbiter.rules.yaml",
+        rules=Path(tmp_cwd) / "arbiter.rules.yaml",
     )
 
 
 @pytest.fixture
-def server(ledger: Ledger):
+def server(ledger: Application):
     return create_server(ledger)
 
 

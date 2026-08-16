@@ -14,8 +14,6 @@ from arbiter.domain.events import (
     DomainEvent,
     HoldAccepted,
     HoldAdjudicated,
-    ProbeCompleted,
-    ProbeRequested,
     QuorumRound2Opened,
     RuleEstablished,
     VoteCast,
@@ -205,29 +203,6 @@ def to_wire(event: DomainEvent) -> dict[str, Any]:
             if key in event.meta and event.meta[key] is not None:
                 payload[key] = event.meta[key]
         return payload
-    if isinstance(event, ProbeRequested):
-        return {
-            "event": ProbeRequested.TYPE,
-            "at": event.at,
-            "decision_id": event.decision_id,
-            "voter": event.voter,
-            "round": event.round,
-            "probe": event.probe,
-            "params": dict(event.params),
-        }
-    if isinstance(event, ProbeCompleted):
-        return {
-            "event": ProbeCompleted.TYPE,
-            "at": event.at,
-            "decision_id": event.decision_id,
-            "voter": event.voter,
-            "round": event.round,
-            "probe": event.probe,
-            "params": dict(event.params),
-            "result_sha256": event.result_sha256,
-            "result_text": event.result_text,
-            "truncated": event.truncated,
-        }
     if isinstance(event, DecisionInvalidated):
         payload = {
             "event": DecisionInvalidated.TYPE,
@@ -394,27 +369,6 @@ def from_wire(raw: dict[str, Any]) -> DomainEvent | None:
                 )
                 if k in raw
             },
-        )
-    if kind == ProbeRequested.TYPE:
-        return ProbeRequested(
-            at=raw["at"],
-            decision_id=raw["decision_id"],
-            voter=raw["voter"],
-            round=int(raw.get("round", 1)),
-            probe=raw["probe"],
-            params=dict(raw.get("params") or {}),
-        )
-    if kind == ProbeCompleted.TYPE:
-        return ProbeCompleted(
-            at=raw["at"],
-            decision_id=raw["decision_id"],
-            voter=raw["voter"],
-            round=int(raw.get("round", 1)),
-            probe=raw["probe"],
-            params=dict(raw.get("params") or {}),
-            result_sha256=raw["result_sha256"],
-            result_text=str(raw.get("result_text") or ""),
-            truncated=bool(raw.get("truncated")),
         )
     if kind == DecisionInvalidated.TYPE:
         return DecisionInvalidated(

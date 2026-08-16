@@ -53,15 +53,3 @@ class HttpApprovalResolver:
                     f"hangar resolve failed status={response.status_code} "
                     f"body={response.text[:500]}"
                 )
-
-
-class CallbackApprovalResolver:
-    """Test/double: invoke an injected async callback (no Hangar process)."""
-
-    def __init__(self, callback: Any) -> None:
-        self._callback = callback
-
-    async def resolve(
-        self, approval_id: str, *, approved: bool, reason: str
-    ) -> None:
-        await self._callback(approval_id, approved, reason)

@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 import yaml
 
-from arbiter.application.services.eval_report import EvalReportBuilder, render_markdown
+from arbiter.application.services.eval_report import build_eval_report, render_markdown
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.bootstrap import create_application
 from arbiter.domain.errors import DomainError
@@ -164,9 +164,9 @@ def test_eval_report_from_ledger_distributions() -> None:
             "approved": True,
         },
     ]
-    report = EvalReportBuilder(
+    report = build_eval_report(
         _FakeApp(wire), repo=Path("/nonexistent"), horizon_days=14
-    ).build()
+    )
     assert report["sample"]["shadow_opens"] == 2
     assert report["divergence"]["comparable"] == 2
     assert report["divergence"]["disagree"] == 2
@@ -235,9 +235,13 @@ async def test_shadow_hold_does_not_gate_and_records_baseline(
         _write_voters(voters, stub.base_url, shadow=True, baseline="voter-1")
         monkeypatch.setenv("ARBITER_VOTERS_PATH", str(voters))
         app = create_application(root=tmp_path / "decisions", voters=voters)
-        adj = HoldAdjudicator.from_intercept_raw(
+        from arbiter.application.intercept_rules import parse_intercept_rules
+
+        adj = HoldAdjudicator(
             app,
-            {"hold": [{"mcp_server": "github", "tool": "create_issue"}]},
+            intercept=parse_intercept_rules(
+                {"hold": [{"mcp_server": "github", "tool": "create_issue"}]}
+            ),
             resolver_principal="service:arbiter",
             min_round_seconds=1.0,
         )

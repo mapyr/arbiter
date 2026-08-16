@@ -9,10 +9,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from arbiter.ledger import Ledger
-from arbiter.llm import build_blind_prompt, prompt_sha256
-from arbiter.protocol import run_model_quorum
-from arbiter.voters import parse_voters_config
+from arbiter.application.app import Application
+from arbiter.application.services.prompts import build_blind_prompt, prompt_sha256
+from arbiter.application.voters_config import parse_voters_config
 from tests.openai_stub import (
     StubScenario,
     StubServer,
@@ -61,7 +60,7 @@ def _write_voters(path: Path, base_url: str) -> None:
     path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
 
 
-def _open_critical(ledger: Ledger) -> dict:
+def _open_critical(ledger: Application) -> dict:
     return ledger.open_decision(
         question="Ship the critical change?",
         options=["opt-a", "opt-b", "opt-c"],
@@ -72,7 +71,7 @@ def _open_critical(ledger: Ledger) -> dict:
     )
 
 
-def _events(ledger: Ledger) -> list[dict]:
+def _events(ledger: Application) -> list[dict]:
     return [
         json.loads(ln)
         for ln in ledger.ledger_path.read_text(encoding="utf-8").splitlines()
@@ -81,7 +80,7 @@ def _events(ledger: Ledger) -> list[dict]:
 
 
 @pytest.mark.asyncio
-async def test_A1_unanimous_critical_allow(ledger: Ledger, tmp_cwd: Path) -> None:
+async def test_A1_unanimous_critical_allow(ledger: Application, tmp_cwd: Path) -> None:
     scenario = StubScenario()
     scenario.on("model-a", vote_handler("opt-a"))
     scenario.on("model-b", vote_handler("opt-a"))
@@ -90,8 +89,7 @@ async def test_A1_unanimous_critical_allow(ledger: Ledger, tmp_cwd: Path) -> Non
         voters_path = tmp_cwd / "arbiter.voters.yaml"
         _write_voters(voters_path, stub.base_url)
         opened = _open_critical(ledger)
-        result = await run_model_quorum(
-            ledger,
+        result = await ledger.run_model_quorum(
             opened["decision_id"],
             config=parse_voters_config(yaml.safe_load(voters_path.read_text())),
             rng=random.Random(0),
@@ -109,7 +107,7 @@ async def test_A1_unanimous_critical_allow(ledger: Ledger, tmp_cwd: Path) -> Non
 
 @pytest.mark.asyncio
 async def test_A2_dissent_triggers_round2_then_deny(
-    ledger: Ledger, tmp_cwd: Path
+    ledger: Application, tmp_cwd: Path
 ) -> None:
     scenario = StubScenario()
     # Round 1: 2 vs 1. Round 2: still dissent, with revision_reason where changed.
@@ -135,8 +133,7 @@ async def test_A2_dissent_triggers_round2_then_deny(
         voters_path = tmp_cwd / "arbiter.voters.yaml"
         _write_voters(voters_path, stub.base_url)
         opened = _open_critical(ledger)
-        result = await run_model_quorum(
-            ledger,
+        result = await ledger.run_model_quorum(
             opened["decision_id"],
             config=parse_voters_config(yaml.safe_load(voters_path.read_text())),
             rng=random.Random(1),
@@ -153,7 +150,7 @@ async def test_A2_dissent_triggers_round2_then_deny(
 
 
 @pytest.mark.asyncio
-async def test_A3_http_401_never_allows(ledger: Ledger, tmp_cwd: Path) -> None:
+async def test_A3_http_401_never_allows(ledger: Application, tmp_cwd: Path) -> None:
     scenario = StubScenario()
     scenario.on("model-a", vote_handler("opt-a"))
     scenario.on("model-b", status_handler(401))
@@ -162,8 +159,7 @@ async def test_A3_http_401_never_allows(ledger: Ledger, tmp_cwd: Path) -> None:
         voters_path = tmp_cwd / "arbiter.voters.yaml"
         _write_voters(voters_path, stub.base_url)
         opened = _open_critical(ledger)
-        result = await run_model_quorum(
-            ledger,
+        result = await ledger.run_model_quorum(
             opened["decision_id"],
             config=parse_voters_config(yaml.safe_load(voters_path.read_text())),
         )
@@ -177,7 +173,7 @@ async def test_A3_http_401_never_allows(ledger: Ledger, tmp_cwd: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_A4_timeout_never_allows(ledger: Ledger, tmp_cwd: Path) -> None:
+async def test_A4_timeout_never_allows(ledger: Application, tmp_cwd: Path) -> None:
     scenario = StubScenario()
     scenario.on("model-a", vote_handler("opt-a"))
     scenario.on("model-b", delay_handler(3.0, vote_handler("opt-a")))
@@ -214,8 +210,7 @@ async def test_A4_timeout_never_allows(ledger: Ledger, tmp_cwd: Path) -> None:
             "reveal_round": True,
         }
         opened = _open_critical(ledger)
-        result = await run_model_quorum(
-            ledger,
+        result = await ledger.run_model_quorum(
             opened["decision_id"],
             config=parse_voters_config(cfg),
         )
@@ -228,7 +223,7 @@ async def test_A4_timeout_never_allows(ledger: Ledger, tmp_cwd: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_A5_option_outside_set_retry_then_no_vote(
-    ledger: Ledger, tmp_cwd: Path
+    ledger: Application, tmp_cwd: Path
 ) -> None:
     scenario = StubScenario()
     scenario.on(
@@ -242,8 +237,7 @@ async def test_A5_option_outside_set_retry_then_no_vote(
         voters_path = tmp_cwd / "arbiter.voters.yaml"
         _write_voters(voters_path, stub.base_url)
         opened = _open_critical(ledger)
-        result = await run_model_quorum(
-            ledger,
+        result = await ledger.run_model_quorum(
             opened["decision_id"],
             config=parse_voters_config(yaml.safe_load(voters_path.read_text())),
         )
@@ -257,7 +251,7 @@ async def test_A5_option_outside_set_retry_then_no_vote(
 
 @pytest.mark.asyncio
 async def test_A6_round2_change_without_revision_reason_rejected(
-    ledger: Ledger, tmp_cwd: Path
+    ledger: Application, tmp_cwd: Path
 ) -> None:
     scenario = StubScenario()
     scenario.on(
@@ -280,8 +274,7 @@ async def test_A6_round2_change_without_revision_reason_rejected(
         voters_path = tmp_cwd / "arbiter.voters.yaml"
         _write_voters(voters_path, stub.base_url)
         opened = _open_critical(ledger)
-        result = await run_model_quorum(
-            ledger,
+        result = await ledger.run_model_quorum(
             opened["decision_id"],
             config=parse_voters_config(yaml.safe_load(voters_path.read_text())),
             rng=random.Random(2),
@@ -303,7 +296,7 @@ async def test_A6_round2_change_without_revision_reason_rejected(
 
 @pytest.mark.asyncio
 async def test_A7_reveal_labels_differ_across_decisions(
-    ledger: Ledger, tmp_cwd: Path
+    ledger: Application, tmp_cwd: Path
 ) -> None:
     scenario = StubScenario()
     for model in ("model-a", "model-b", "model-c"):
@@ -322,8 +315,7 @@ async def test_A7_reveal_labels_differ_across_decisions(
         cfg = parse_voters_config(yaml.safe_load(voters_path.read_text()))
         for seed in (10, 11):
             opened = _open_critical(ledger)
-            await run_model_quorum(
-                ledger,
+            await ledger.run_model_quorum(
                 opened["decision_id"],
                 config=cfg,
                 rng=random.Random(seed),
@@ -340,7 +332,7 @@ async def test_A7_reveal_labels_differ_across_decisions(
 
 @pytest.mark.asyncio
 async def test_A8_prompt_sha256_stable_across_identical_runs(
-    ledger: Ledger, tmp_cwd: Path
+    ledger: Application, tmp_cwd: Path
 ) -> None:
     scenario = StubScenario()
     for model in ("model-a", "model-b", "model-c"):
@@ -352,8 +344,8 @@ async def test_A8_prompt_sha256_stable_across_identical_runs(
         cfg = parse_voters_config(yaml.safe_load(voters_path.read_text()))
         for _ in range(2):
             opened = _open_critical(ledger)
-            result = await run_model_quorum(
-                ledger, opened["decision_id"], config=cfg, rng=random.Random(0)
+            result = await ledger.run_model_quorum(
+                opened["decision_id"], config=cfg, rng=random.Random(0)
             )
             hashes.append(result["prompt_sha256"])
     assert hashes[0] == hashes[1]
@@ -371,14 +363,14 @@ async def test_A8_prompt_sha256_stable_across_identical_runs(
 
 @pytest.mark.asyncio
 async def test_open_decision_rejects_roster_mismatch(
-    ledger: Ledger, tmp_cwd: Path, monkeypatch: pytest.MonkeyPatch
+    ledger: Application, tmp_cwd: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     voters_path = tmp_cwd / "arbiter.voters.yaml"
     _write_voters(voters_path, "http://127.0.0.1:9/v1")
     monkeypatch.setenv("ARBITER_VOTERS_PATH", str(voters_path))
     from mcp import Client
 
-    from arbiter.server import create_server
+    from arbiter.adapters.inbound.mcp_server import create_server
     from tests.conftest import tool_error_text
 
     server = create_server(ledger)

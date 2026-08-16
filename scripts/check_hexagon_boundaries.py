@@ -5,7 +5,6 @@ Rules:
 - ``arbiter.domain`` may import only the stdlib and itself.
 - ``arbiter.application`` may import stdlib, itself, and ``arbiter.domain``.
 - ``arbiter.adapters`` may import stdlib, third-party, domain, application, adapters.
-- Compatibility shims at package root are unconstrained (thin re-exports).
 """
 
 from __future__ import annotations

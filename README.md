@@ -142,7 +142,7 @@ Cookbook: [docs/cookbooks/hangar-delivery.md](docs/cookbooks/hangar-delivery.md)
 - **Shadow** — quorum still runs and is ledgered; holds are not gated (measure
   cost vs baseline). `arbiter report-eval --horizon-days 14`
 - **Decision structure** — preconditions, narrowing, dependencies, installed
-  rules; evidence probes stay behind a flag. Offline check:
+  rules. Offline check:
   `pytest tests/ladder -q`
 
 ## HTTP shared secret

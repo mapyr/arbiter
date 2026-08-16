@@ -24,8 +24,7 @@ def parse_client_gate(rules: dict[str, Any] | None) -> dict[str, Any]:
         raise DomainError(
             "client_gate.plan.mode must be 'session' or 'on_uncovered'"
         )
-    # Strip inline YAML comments if a non-standard loader kept them.
-    mode = mode_raw.split("#", 1)[0].strip()
+    mode = mode_raw.strip()
     if mode not in ("session", "on_uncovered"):
         raise DomainError(
             "client_gate.plan.mode must be 'session' or 'on_uncovered'"
@@ -37,6 +36,6 @@ def parse_client_gate(rules: dict[str, Any] | None) -> dict[str, Any]:
     return {
         "plan": {
             "mode": mode,
-            "arbiter_mcp_server": server.strip().split("#", 1)[0].strip(),
+            "arbiter_mcp_server": server.strip(),
         }
     }

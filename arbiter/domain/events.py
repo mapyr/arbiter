@@ -175,39 +175,6 @@ class BreakGlassUsed:
 
 
 @dataclass(frozen=True)
-class ProbeRequested:
-    """Voter asked for a closed-catalog probe — not a vote."""
-
-    at: str
-    decision_id: str
-    voter: str
-    round: int
-    probe: str
-    params: dict[str, str]
-    meta: dict[str, Any] = field(default_factory=dict)
-
-    TYPE = "probe.requested"
-
-
-@dataclass(frozen=True)
-class ProbeCompleted:
-    """Arbiter-executed probe result stored for replay."""
-
-    at: str
-    decision_id: str
-    voter: str
-    round: int
-    probe: str
-    params: dict[str, str]
-    result_sha256: str
-    result_text: str
-    truncated: bool
-    meta: dict[str, Any] = field(default_factory=dict)
-
-    TYPE = "probe.completed"
-
-
-@dataclass(frozen=True)
 class DecisionInvalidated:
     """Decision no longer covers; may cascade to dependents."""
 
@@ -246,8 +213,6 @@ DomainEvent = (
     | CoverageChecked
     | BaselineVerdict
     | BreakGlassUsed
-    | ProbeRequested
-    | ProbeCompleted
     | DecisionInvalidated
     | RuleEstablished
 )

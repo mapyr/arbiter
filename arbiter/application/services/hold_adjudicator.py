@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Any
 
 from arbiter.application.app import Application
-from arbiter.application.intercept_rules import parse_intercept_rules
 from arbiter.domain.errors import DomainError
 from arbiter.domain.events import HoldAccepted, HoldAdjudicated
 from arbiter.domain.services.call_identity import call_identity
@@ -70,8 +69,6 @@ class HoldAdjudicator:
         resolver_principal: str,
         hold_margin_seconds: float = DEFAULT_HOLD_MARGIN_SECONDS,
         min_round_seconds: float | None = None,
-        allow_option: str = "allow",
-        deny_option: str = "deny",
         enable_narrowing: bool = True,
         include_escalate: bool = False,
     ) -> None:
@@ -80,32 +77,8 @@ class HoldAdjudicator:
         self._resolver_principal = resolver_principal
         self._hold_margin_seconds = hold_margin_seconds
         self._min_round_seconds_override = min_round_seconds
-        self._allow_option = allow_option
-        self._deny_option = deny_option
         self._enable_narrowing = enable_narrowing
         self._include_escalate = include_escalate
-
-    @classmethod
-    def from_intercept_raw(
-        cls,
-        app: Application,
-        raw: Any,
-        *,
-        resolver_principal: str,
-        hold_margin_seconds: float = DEFAULT_HOLD_MARGIN_SECONDS,
-        min_round_seconds: float | None = None,
-        enable_narrowing: bool = True,
-        include_escalate: bool = False,
-    ) -> HoldAdjudicator:
-        return cls(
-            app,
-            intercept=parse_intercept_rules(raw),
-            resolver_principal=resolver_principal,
-            hold_margin_seconds=hold_margin_seconds,
-            min_round_seconds=min_round_seconds,
-            enable_narrowing=enable_narrowing,
-            include_escalate=include_escalate,
-        )
 
     def accept(self, held: HeldCall) -> str:
         """Record immediate receipt (Z1). Returns call_id."""
@@ -300,7 +273,7 @@ class HoldAdjudicator:
                 include_escalate=self._include_escalate,
             )
         else:
-            options = [self._allow_option, self._deny_option]
+            options = ["allow", "deny"]
             if self._include_escalate:
                 options.append("escalate_to_human")
         opened = self._app.open_decision(
@@ -321,7 +294,7 @@ class HoldAdjudicator:
         q_started = time.perf_counter()
         resolved = await self._app.run_model_quorum(decision_id)
         quorum_latency_ms = (time.perf_counter() - q_started) * 1000.0
-        kind = option_kind(str(resolved.get("chosen_option") or self._deny_option))
+        kind = option_kind(str(resolved.get("chosen_option") or "deny"))
         if resolved.get("verdict") in (
             "allow",
             "deny",

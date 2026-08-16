@@ -167,7 +167,3 @@ def _extract_message_text(payload: Any) -> str | None:
     if isinstance(text, str):
         return text
     return None
-
-
-# Backward-compatible alias used by older call sites / tests
-OpenAICompatibleClient = OpenAIVoterGateway

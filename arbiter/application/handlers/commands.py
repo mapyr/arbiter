@@ -23,8 +23,6 @@ from arbiter.domain.events import (
     DecisionInvalidated,
     HoldAccepted,
     HoldAdjudicated,
-    ProbeCompleted,
-    ProbeRequested,
     RuleEstablished,
 )
 from arbiter.domain.model import Decision
@@ -139,12 +137,6 @@ class CommandHandlers:
         self._events.append(event)
 
     def record_baseline_verdict(self, event: BaselineVerdict) -> None:
-        self._events.append(event)
-
-    def record_probe_requested(self, event: ProbeRequested) -> None:
-        self._events.append(event)
-
-    def record_probe_completed(self, event: ProbeCompleted) -> None:
         self._events.append(event)
 
     def invalidate_decision(

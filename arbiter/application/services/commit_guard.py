@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from arbiter.application.app import Application
-from arbiter.application.services.coverage import CoverageService, critical_paths
+from arbiter.application.services.coverage import check_coverage, critical_paths
 from arbiter.domain.events import BreakGlassUsed
 from arbiter.domain.timeutil import parse_iso
 
@@ -60,9 +60,9 @@ def verify_commit(
             "decision_id": None,
             "break_glass": glass,
         }
-    svc = CoverageService(app, rules=rules)
-    # Do not write coverage.checked from the commit gate — query only.
-    result = svc.check(
+    result = check_coverage(
+        app,
+        rules=rules,
         paths=crit,
         tool="commit",
         decision_id=decision_id,

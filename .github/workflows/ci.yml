@@ -119,7 +119,7 @@ jobs:
           import importlib.util
           origin = Path(importlib.util.find_spec("arbiter").origin).resolve()
           assert "site-packages" in origin.parts, origin
-          from arbiter.server import package_name, package_version
+          from arbiter.adapters.inbound.mcp_server import package_name, package_version
           assert package_name() == "arbiter"
           assert package_version() == importlib.metadata.version("arbiter")
           PY

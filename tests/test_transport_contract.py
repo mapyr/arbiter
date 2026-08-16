@@ -14,8 +14,13 @@ from pathlib import Path
 import pytest
 from mcp import Client
 
-from arbiter.canonical import canonical_json_bytes
-from arbiter.server import TOOL_DESCRIPTIONS, create_server, package_name, package_version
+from arbiter.domain.services.canonical import canonical_json_bytes
+from arbiter.adapters.inbound.mcp_server import (
+    TOOL_DESCRIPTIONS,
+    create_server,
+    package_name,
+    package_version,
+)
 
 pytestmark = pytest.mark.integration
 

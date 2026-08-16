@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from mcp import Client, ClientSession, StdioServerParameters, stdio_client
 
-from arbiter.ledger import Ledger
+from arbiter.application.app import Application
 
 pytestmark = pytest.mark.integration
 
@@ -124,7 +124,7 @@ async def test_mcp_R1_rejects_unknown_option(server) -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_get_decision_read_only(server, ledger: Ledger) -> None:
+async def test_mcp_get_decision_read_only(server, ledger: Application) -> None:
     async with Client(server) as client:
         opened = tool_payload(
             await client.call_tool(
@@ -177,7 +177,7 @@ async def test_stdio_installed_package_happy_path(tmp_path: Path) -> None:
     # Ensure site-packages of this interpreter are used as-is.
     params = StdioServerParameters(
         command=sys.executable,
-        args=["-m", "arbiter.server"],
+        args=["-m", "arbiter"],
         env=env,
         cwd=str(tmp_path),
     )

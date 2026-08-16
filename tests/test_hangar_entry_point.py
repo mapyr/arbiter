@@ -46,15 +46,11 @@ def test_hangar_entry_point_loads_and_builds_delivery(
     data = tmp_path / "decisions"
     data.mkdir()
 
-    async def _resolve(approval_id: str, approved: bool, reason: str) -> None:
-        return None
-
     built = factory(
         {
             "data_dir": str(data),
             "intercept_rules_path": str(intercept),
             "resolve_base_url": "http://127.0.0.1:9",
-            "_resolve_callback": _resolve,
         }
     )
     assert isinstance(built, delivery_mod.ArbiterApprovalDelivery)

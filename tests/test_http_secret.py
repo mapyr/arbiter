@@ -15,7 +15,7 @@ import pytest
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 
-from arbiter.http_secret import REJECT_BODY, REJECT_STATUS, SharedSecretASGI  # noqa: E501
+from arbiter.adapters.inbound.http_secret import REJECT_BODY, REJECT_STATUS, SharedSecretASGI  # noqa: E501
 
 pytestmark = pytest.mark.integration
 

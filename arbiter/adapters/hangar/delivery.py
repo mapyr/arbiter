@@ -10,11 +10,7 @@ from typing import Any
 import yaml
 
 from arbiter.adapters.hangar.config import parse_hangar_channel_config, refuse_start
-from arbiter.adapters.hangar.resolve_client import (
-    ApprovalResolver,
-    CallbackApprovalResolver,
-    HttpApprovalResolver,
-)
+from arbiter.adapters.hangar.resolve_client import HttpApprovalResolver
 from arbiter.application.intercept_rules import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
 from arbiter.bootstrap import create_application
@@ -34,7 +30,7 @@ class ArbiterApprovalDelivery:
         self,
         *,
         adjudicator: HoldAdjudicator,
-        resolver: ApprovalResolver,
+        resolver: Any,
         app: Any | None = None,
     ) -> None:
         self._adjudicator = adjudicator
@@ -145,7 +141,10 @@ def create_delivery(channel_config: dict[str, Any] | None) -> ArbiterApprovalDel
         refuse_start(f"cannot read intercept rules: {exc}")
         raise  # pragma: no cover
 
-    resolver = _build_resolver(channel_config or {}, cfg)
+    resolver = HttpApprovalResolver(
+        base_url=cfg.resolve_base_url,
+        api_key=cfg.resolve_token,
+    )
     app = create_application(
         root=cfg.data_dir,
         rules=cfg.rules_path,
@@ -163,34 +162,7 @@ def create_delivery(channel_config: dict[str, Any] | None) -> ArbiterApprovalDel
     )
 
 
-def _build_resolver(
-    channel_config: dict[str, Any], cfg: Any
-) -> ApprovalResolver:
-    callback = channel_config.get("_resolve_callback")
-    if callback is not None:
-        return CallbackApprovalResolver(callback)
-    return HttpApprovalResolver(
-        base_url=cfg.resolve_base_url,
-        api_key=cfg.resolve_token,
-    )
-
-
-def create_delivery_for_tests(
-    *,
-    adjudicator: HoldAdjudicator,
-    resolve_callback: Any,
-    app: Any | None = None,
-) -> ArbiterApprovalDelivery:
-    """Test helper — skip Hangar channel validation / filesystem."""
-    return ArbiterApprovalDelivery(
-        adjudicator=adjudicator,
-        resolver=CallbackApprovalResolver(resolve_callback),
-        app=app if app is not None else getattr(adjudicator, "_app", None),
-    )
-
-
 __all__ = [
     "ArbiterApprovalDelivery",
     "create_delivery",
-    "create_delivery_for_tests",
 ]

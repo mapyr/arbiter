@@ -16,18 +16,14 @@ import pytest
 import yaml
 
 from arbiter.adapters.hangar.config import parse_hangar_channel_config
-from arbiter.adapters.hangar.delivery import (
-    ArbiterApprovalDelivery,
-    create_delivery,
-    create_delivery_for_tests,
-)
+from arbiter.adapters.hangar.delivery import ArbiterApprovalDelivery, create_delivery
 from arbiter.adapters.hangar.wiring import assert_delivery_wired
 from arbiter.application.intercept_rules import parse_intercept_rules
 from arbiter.application.services.hold_adjudicator import HeldCall, HoldAdjudicator
+from arbiter.application.voters_config import parse_voters_config
 from arbiter.bootstrap import create_application
 from arbiter.domain.errors import DomainError
 from arbiter.domain.services.call_identity import call_identity
-from arbiter.voters import parse_voters_config
 from tests.openai_stub import StubScenario, StubServer, delay_handler, vote_handler
 
 pytestmark = pytest.mark.integration
@@ -115,6 +111,27 @@ class FakeApprovalRequest:
             self.expires_at = _expires(120)
 
 
+class _CallbackResolver:
+    def __init__(self, callback: Any) -> None:
+        self._callback = callback
+
+    async def resolve(self, approval_id: str, *, approved: bool, reason: str) -> None:
+        await self._callback(approval_id, approved, reason)
+
+
+def create_delivery_for_tests(
+    *,
+    adjudicator: HoldAdjudicator,
+    resolve_callback: Any,
+    app: Any,
+) -> ArbiterApprovalDelivery:
+    return ArbiterApprovalDelivery(
+        adjudicator=adjudicator,
+        resolver=_CallbackResolver(resolve_callback),
+        app=app,
+    )
+
+
 @dataclass
 class HoldHarness:
     """Hangar-shaped hold: send returns immediately; wait for resolve callback."""
@@ -130,9 +147,7 @@ class HoldHarness:
     async def run(self, request: FakeApprovalRequest) -> tuple[bool, str]:
         self._event = asyncio.Event()
         self.resolutions.clear()
-        from arbiter.adapters.hangar.resolve_client import CallbackApprovalResolver
-
-        self.delivery._resolver = CallbackApprovalResolver(self._on_resolve)
+        self.delivery._resolver = _CallbackResolver(self._on_resolve)
         started = time.perf_counter()
         await self.delivery.send(request)
         send_ms = (time.perf_counter() - started) * 1000.0
@@ -165,9 +180,9 @@ def stage4_env(tmp_cwd: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 def _adj(app, intercept_path: Path, **kwargs: Any) -> HoldAdjudicator:
-    return HoldAdjudicator.from_intercept_raw(
+    return HoldAdjudicator(
         app,
-        yaml.safe_load(intercept_path.read_text()),
+        intercept=parse_intercept_rules(yaml.safe_load(intercept_path.read_text())),
         resolver_principal=PRINCIPAL,
         min_round_seconds=kwargs.pop("min_round_seconds", 1.0),
         **kwargs,

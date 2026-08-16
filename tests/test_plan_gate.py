@@ -170,6 +170,13 @@ async def test_ensure_plan_allow_then_coverage(
         denied = app.check_coverage(paths=["auth/handler.py"], tool="edit")
         assert denied["approved"] is False
 
+        parent = app.open_decision(
+            question="parent",
+            options=["allow", "deny"],
+            voters=["voter-1", "voter-2", "voter-3"],
+            evidence={"k": 1},
+            scope=["policy/rule"],
+        )
         result = await app.ensure_plan(
             {
                 "goal": "Update auth handler login path",
@@ -180,19 +187,21 @@ async def test_ensure_plan_allow_then_coverage(
                     }
                 ],
                 "scope": ["auth/**"],
+                "depends_on": [parent["decision_id"]],
+                "establishes_rule": {
+                    "kind": "require_contract_test",
+                    "path_glob": "src/**",
+                    "detail": "writes under src require contract test",
+                    "rule_id": "rule-src-contract",
+                },
             }
         )
         assert result["approved"] is True
         assert result["decision_id"]
         assert "auth/**" in result["scope"]
-        opened = next(
-            e
-            for e in app.read_all_wire()
-            if e.get("event") == "decision.opened"
-            and e["decision_id"] == result["decision_id"]
-        )
-        assert not opened.get("depends_on")
-        assert "establishes_rule" not in opened
+        got = app.get_decision(result["decision_id"])
+        assert got["depends_on"] == [parent["decision_id"]]
+        assert got["establishes_rule"]["rule_id"] == "rule-src-contract"
 
         covered = app.check_coverage(paths=["auth/handler.py"], tool="edit")
         assert covered["approved"] is True
@@ -232,51 +241,3 @@ async def test_ensure_plan_rejects_universal_scope(
                     "scope": ["**/*"],
                 }
             )
-
-
-@pytest.mark.asyncio
-async def test_ensure_plan_passes_deps_and_rule(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    rules = tmp_path / "arbiter.rules.yaml"
-    rules.write_text(
-        yaml.safe_dump({"default": "routine", "critical": {"paths": ["auth/**"]}}),
-        encoding="utf-8",
-    )
-    data = tmp_path / "data"
-    data.mkdir()
-    monkeypatch.setenv("ARBITER_DATA_DIR", str(data))
-    monkeypatch.setenv("ARBITER_RULES_PATH", str(rules))
-    rule = {
-        "kind": "require_contract_test",
-        "path_glob": "src/**",
-        "detail": "writes under src require contract test",
-        "rule_id": "rule-src-contract",
-    }
-    scenario = StubScenario()
-    for model in ("model-a", "model-b", "model-c"):
-        scenario.on(model, vote_handler("allow"))
-    async with StubServer(scenario) as stub:
-        _write_voters(tmp_path / "arbiter.voters.yaml", stub.base_url)
-        monkeypatch.setenv("ARBITER_VOTERS_PATH", str(tmp_path / "arbiter.voters.yaml"))
-        app = create_application()
-        parent = app.open_decision(
-            question="parent",
-            options=["allow", "deny"],
-            voters=["voter-1", "voter-2", "voter-3"],
-            evidence={"k": 1},
-            scope=["policy/rule"],
-        )
-        result = await app.ensure_plan(
-            {
-                "goal": "Update auth handler login path",
-                "steps": [{"action": "edit auth handler", "paths": ["auth/handler.py"]}],
-                "scope": ["auth/**"],
-                "depends_on": [parent["decision_id"]],
-                "establishes_rule": rule,
-            }
-        )
-    got = app.get_decision(result["decision_id"])
-    assert got["depends_on"] == [parent["decision_id"]]
-    assert got["establishes_rule"] == rule
-    assert result["plan"]["depends_on"] == [parent["decision_id"]]

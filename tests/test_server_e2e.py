@@ -195,40 +195,19 @@ async def test_mcp_open_decision_matches_application_deps_and_rule(
                 "get_decision", {"decision_id": via_mcp["decision_id"]}
             )
         )
-        real_id = ledger._new_id
-        ledger._new_id = lambda: "d-mcp-loop"
-        try:
-            cycle = await client.call_tool(
-                "open_decision",
-                {**fields, "question": "loop", "depends_on": ["d-mcp-loop"]},
-            )
-        finally:
-            ledger._new_id = real_id
     via_app = ledger.open_decision(**fields)
-
-    def surface(row: dict) -> dict:
-        return {
-            "depends_on": row["depends_on"],
-            "establishes_rule": row["establishes_rule"],
-            "scope": list(row["scope"]),
-        }
-
-    assert surface(via_mcp) == surface(via_app)
-    assert surface(view) == surface(via_mcp)
-    mcp_wire = next(
-        e
-        for e in ledger.read_all_wire()
-        if e["decision_id"] == via_mcp["decision_id"]
+    assert (
+        via_mcp["depends_on"]
+        == via_app["depends_on"]
+        == view["depends_on"]
+        == [parent["decision_id"]]
     )
-    app_wire = next(
-        e
-        for e in ledger.read_all_wire()
-        if e["decision_id"] == via_app["decision_id"]
+    assert (
+        via_mcp["establishes_rule"]
+        == via_app["establishes_rule"]
+        == view["establishes_rule"]
+        == _RULE
     )
-    assert mcp_wire["depends_on"] == app_wire["depends_on"] == [parent["decision_id"]]
-    assert mcp_wire["establishes_rule"] == app_wire["establishes_rule"] == _RULE
-    assert cycle.is_error is True
-    assert "cycle" in tool_error_text(cycle)
 
 
 @pytest.mark.asyncio

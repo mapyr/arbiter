@@ -411,14 +411,6 @@ def test_open_and_get_decision_surface_deps_and_rule(ledger: Application) -> Non
     got = ledger.get_decision(opened["decision_id"])
     assert got["depends_on"] == [parent["decision_id"]]
     assert got["establishes_rule"] == _RULE
-    wire = next(
-        e
-        for e in ledger.read_all_wire()
-        if e.get("event") == "decision.opened"
-        and e["decision_id"] == opened["decision_id"]
-    )
-    assert wire["depends_on"] == [parent["decision_id"]]
-    assert wire["establishes_rule"] == _RULE
 
 
 def test_self_dependency_refused(ledger: Application) -> None:

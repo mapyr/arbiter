@@ -175,25 +175,28 @@ def create_delivery(channel_config: dict[str, Any] | None) -> ArbiterApprovalDel
         base_url=cfg.resolve_base_url,
         api_key=cfg.resolve_token,
     )
-    app = create_application(
-        root=cfg.data_dir,
-        rules=cfg.rules_path,
-        voters=cfg.voters_path,
-    )
-    adjudicator = HoldAdjudicator(
-        app,
-        intercept=intercept,
-        resolver_principal=cfg.principal_id,
-        hold_margin_seconds=cfg.hold_margin_seconds,
-        min_round_seconds=cfg.min_round_seconds,
-    )
-    delivery = ArbiterApprovalDelivery(
-        adjudicator=adjudicator, resolver=resolver, app=app
-    )
     try:
+        app = create_application(
+            root=cfg.data_dir,
+            rules=cfg.rules_path,
+            voters=cfg.voters_path,
+        )
+        adjudicator = HoldAdjudicator(
+            app,
+            intercept=intercept,
+            resolver_principal=cfg.principal_id,
+            hold_margin_seconds=cfg.hold_margin_seconds,
+            min_round_seconds=cfg.min_round_seconds,
+        )
+        delivery = ArbiterApprovalDelivery(
+            adjudicator=adjudicator, resolver=resolver, app=app
+        )
         delivery.prove_wired()
     except DomainError as exc:
         refuse_start(str(exc))
+        raise  # pragma: no cover
+    except OSError as exc:
+        refuse_start(f"ledger not writable: {exc}")
         raise  # pragma: no cover
     return delivery
 

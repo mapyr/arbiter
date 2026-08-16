@@ -16,6 +16,9 @@ OPENCODE_AUTH="${OPENCODE_AUTH:-$HOME/.local/share/opencode/auth.json}"
 OPENCODE_MODEL="${OPENCODE_MODEL:-github-copilot/gpt-4o}"
 ENV_FILE="$DEPLOY/.env"
 STATE_DIR="${ARBITER_PODMAN_STATE:-/tmp/arbiter-podman}"
+# Podman machine /tmp is a quota tmpfs, not the host /tmp. Bind the real path
+# (/private/tmp on macOS). Host `source /tmp/arbiter-podman/env.sh` still works.
+STATE_DIR="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$STATE_DIR")"
 HANGAR_HOST_PORT="${HANGAR_HOST_PORT:-18782}"
 VOLUME_HANGAR_DATA="${VOLUME_HANGAR_DATA:-arbiter_hangar-data}"
 
@@ -116,6 +119,14 @@ log "building images (arbiter + hangar-with-arbiter-delivery)"
 podman build -t localhost/arbiter:0.7.2 -f "$DEPLOY/Containerfile.arbiter" "$ROOT"
 podman build -t localhost/arbiter-hangar:2.6.0 -f "$DEPLOY/Containerfile.hangar" "$ROOT"
 
+SECRET_FILE="$STATE_DIR/http-secret"
+if [[ ! -f "$SECRET_FILE" ]]; then
+  openssl rand -hex 16 >"$SECRET_FILE"
+  chmod 600 "$SECRET_FILE"
+  log "generated HTTP shared secret → $SECRET_FILE"
+fi
+ARBITER_HTTP_SECRET="$(cat "$SECRET_FILE")"
+
 parse_bootstrap_key() {
   local text_file="$1"
   python3 - <<'PY' "$text_file"
@@ -142,6 +153,7 @@ else
     -v "$DEPLOY/config/hangar.config.yaml:/app/config.yaml:ro" \
     -v "$DEPLOY/config:/config:ro" \
     -e MCP_CONFIG=/app/config.yaml \
+    -e ARBITER_HTTP_SECRET="${ARBITER_HTTP_SECRET}" \
     localhost/arbiter-hangar:2.6.0 \
     auth bootstrap-admin \
       --config /app/config.yaml \
@@ -168,17 +180,11 @@ else
   log "saved Hangar API key → $KEY_FILE"
 fi
 
-SECRET_FILE="$STATE_DIR/http-secret"
-if [[ ! -f "$SECRET_FILE" ]]; then
-  openssl rand -hex 16 >"$SECRET_FILE"
-  chmod 600 "$SECRET_FILE"
-  log "generated HTTP shared secret → $SECRET_FILE"
-fi
-ARBITER_HTTP_SECRET="$(cat "$SECRET_FILE")"
-
 LEDGER_DIR="$STATE_DIR/decisions"
 mkdir -p "$LEDGER_DIR"
 chmod 777 "$LEDGER_DIR"
+# Do not pre-create ledger.jsonl on the host: Podman machine virtiofs maps
+# host-owned files as uid 0 mode 0644, which Hangar (uid 1000) cannot append.
 
 cat >"$ENV_FILE" <<EOF
 HANGAR_HOST_PORT=${HANGAR_HOST_PORT}
@@ -230,7 +236,7 @@ registered=0
 hangar_cid=""
 for _ in $(seq 1 45); do
   hangar_cid="$(hangar_container_id)"
-  body="$(curl -sS -H "X-API-Key: ${HANGAR_API_KEY}" \
+  body="$(curl -sS -L -H "X-API-Key: ${HANGAR_API_KEY}" \
     "http://127.0.0.1:${HANGAR_HOST_PORT}/api/mcp_servers" 2>/dev/null || true)"
   if printf '%s' "$body" | rg -q '"arbiter"' \
     && ! printf '%s' "$body" | rg -q 'authentication_failed|rate_limit'; then

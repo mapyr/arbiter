@@ -880,6 +880,27 @@ def test_14_missing_credentials_refuse_start(
         )
 
 
+def test_unwritable_ledger_refuses_start(
+    stage4_env: dict, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("ARBITER_HANGAR_RESOLVE_TOKEN", "mcp_x")
+    monkeypatch.setenv("ARBITER_HANGAR_PRINCIPAL_ID", "service:arbiter")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o500)
+    try:
+        with pytest.raises(SystemExit, match="ledger not writable"):
+            create_delivery(
+                {
+                    "data_dir": str(locked),
+                    "intercept_rules_path": str(stage4_env["intercept"]),
+                    "resolve_base_url": "http://127.0.0.1:8000",
+                }
+            )
+    finally:
+        locked.chmod(0o700)
+
+
 @pytest.mark.asyncio
 async def test_15_resolver_principal_linked_to_decision(stage4_env: dict) -> None:
     scenario = StubScenario()

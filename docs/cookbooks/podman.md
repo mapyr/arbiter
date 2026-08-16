@@ -55,6 +55,8 @@ opencode
 
 `source env.sh` sets Hangar URL/key, `ARBITER_DATA_DIR` (host ledger bind), and
 `ARBITER_MCP_SERVER`. OpenCode config lives under `/tmp/arbiter-podman/project`.
+On macOS Podman, `up.sh` realpath's that dir to `/private/tmp/…` so the ledger
+bind is writable (VM `/tmp` is a separate tmpfs).
 
 ## Ops
 

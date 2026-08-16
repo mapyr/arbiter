@@ -26,6 +26,9 @@ services:
     volumes:
       - ${ARBITER_LEDGER_DIR}:/data/decisions
       - ./config:/config:ro
+    # Hangar image runs as uid 1000; share it so the ledger bind is writable
+    # by both processes (container root creates 0644 files hangar cannot append).
+    user: "1000:1000"
     networks:
       - mcp-net
     healthcheck:

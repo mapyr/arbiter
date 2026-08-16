@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          fetch-depth: 0
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -73,7 +73,7 @@ jobs:
 
       - name: Domain coverage from unit suite
         run: |
-          STAGE="$(scripts/ci_stage.sh "$RUNNER_TEMP/arbiter-domain" scripts)"
+          STAGE="$(scripts/ci_stage.sh "$RUNNER_TEMP/arbiter-domain")"
           cd "$STAGE"
           "$RUNNER_TEMP/arbiter-venv/bin/pytest" tests \
             -m "not integration" \
@@ -131,7 +131,7 @@ jobs:
           python-version: "3.12"
       - name: Full suite coverage (installed package)
         run: |
-          STAGE="$(scripts/ci_stage.sh "$RUNNER_TEMP/arbiter-cov" scripts)"
+          STAGE="$(scripts/ci_stage.sh "$RUNNER_TEMP/arbiter-cov")"
           cd "$STAGE"
           "$RUNNER_TEMP/arbiter-venv/bin/pytest" tests \
             --cov=arbiter \

@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # Copy tests into an empty directory so pytest imports the *installed* package,
-# not the git checkout. Extra paths (e.g. scripts/) are copied into DEST as-is.
+# not the git checkout. Always includes scripts/ (hexagon unit test) and
+# pyproject.toml (pytest markers).
 #
-# Usage: scripts/ci_stage.sh DEST [extra_path ...]
+# Usage: scripts/ci_stage.sh DEST
 set -euo pipefail
 
 dest="${1:?destination directory}"
-shift
 mkdir -p "$dest"
 cp -R tests "$dest/tests"
+cp -R scripts "$dest/scripts"
 cp arbiter.rules.yaml.example "$dest/"
-for extra in "$@"; do
-  cp -R "$extra" "$dest/"
-done
+cp pyproject.toml "$dest/"
 printf '%s\n' "$dest"

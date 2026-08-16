@@ -333,6 +333,53 @@ async def test_lab_migrate_apply_denied_without_trial(stage4_env: dict) -> None:
 
 
 @pytest.mark.asyncio
+async def test_allow_narrow_glob_covers_later_write(stage4_env: dict) -> None:
+    _write_intercept(
+        stage4_env["intercept"], [{"mcp_server": "mockfs", "tool": "*"}]
+    )
+    scenario = StubScenario()
+    narrow = "allow_narrow:ttl=300;paths=notes/**"
+    for model in ("model-a", "model-b", "model-c"):
+        scenario.on(model, vote_handler(narrow))
+    async with StubServer(scenario) as stub:
+        _write_voters(stage4_env["voters"], stub.base_url)
+        app = create_application(
+            root=stage4_env["data"],
+            rules=stage4_env["rules"],
+            voters=stage4_env["voters"],
+        )
+        harness = HoldHarness(
+            create_delivery_for_tests(
+                adjudicator=_adj(app, stage4_env["intercept"]),
+                resolve_callback=lambda *a, **k: asyncio.sleep(0),
+                app=app,
+            )
+        )
+        first, _ = await harness.run(
+            FakeApprovalRequest(
+                approval_id="n1",
+                mcp_server_id="mockfs",
+                tool_name="write_note",
+                arguments={"path": "notes/a.txt", "content": "a"},
+            )
+        )
+        second, reason = await harness.run(
+            FakeApprovalRequest(
+                approval_id="n2",
+                mcp_server_id="mockfs",
+                tool_name="write_note",
+                arguments={"path": "notes/b.txt", "content": "b"},
+            )
+        )
+    assert first is True and second is True
+    holds = [e for e in _events(app) if e["event"] == "hold.adjudicated"]
+    assert holds[0]["path"] == "quorum"
+    assert holds[1]["path"] == "covered"
+    assert holds[1]["decision_id"] == holds[0]["decision_id"]
+    assert holds[0]["decision_id"] in reason
+
+
+@pytest.mark.asyncio
 async def test_rename_dst_outside_scope_is_not_covered(stage4_env: dict) -> None:
     _write_intercept(
         stage4_env["intercept"], [{"mcp_server": "mockfs", "tool": "*"}]

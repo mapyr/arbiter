@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE=(podman compose -f "$DEPLOY/compose.yaml" --project-directory "$DEPLOY")
 OPENCODE_AUTH="${OPENCODE_AUTH:-$HOME/.local/share/opencode/auth.json}"
-OPENCODE_MODEL="${OPENCODE_MODEL:-github-copilot/gpt-4o}"
+OPENCODE_MODEL="${OPENCODE_MODEL:-github-copilot/gpt-5-mini}"
 ENV_FILE="$DEPLOY/.env"
 STATE_DIR="${ARBITER_PODMAN_STATE:-/tmp/arbiter-podman}"
 # Podman machine /tmp is a quota tmpfs, not the host /tmp. Bind the real path

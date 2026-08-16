@@ -28,7 +28,7 @@ if that write fails.
 
 Needs OpenCode with GitHub Copilot login (or voter keys in
 `deploy/podman/.env`). Model override: `OPENCODE_MODEL` (default
-`github-copilot/gpt-4o`). After upgrading onto the static-remote stack, run
+`github-copilot/gpt-5-mini`). After upgrading onto the static-remote stack, run
 `--reset` once (old Hangar DB may still hold a discovered arbiter).
 
 ```bash

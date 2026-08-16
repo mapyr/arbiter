@@ -429,7 +429,9 @@ class HoldAdjudicator:
                 if path_pat:
                     from arbiter.domain.services.classify import path_matches
 
-                    if path is None or not path_matches(path, path_pat):
+                    if not paths or any(
+                        not path_matches(p, path_pat) for p in paths
+                    ):
                         continue
             return decision_id
         return None

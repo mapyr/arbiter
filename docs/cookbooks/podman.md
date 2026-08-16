@@ -47,7 +47,7 @@ opencode
   uncovered → `ARBITER_PLAN_REQUIRED` → `ensure_plan` with a **narrow** scope
 - local `curl` — denied at L1; HTTP via `mockhttp/curl` → hold → voters
 - files — `mockfs/*` → hold → quorum
-- Give `hangar_call` ≥90s (hold + three voters)
+- Give `hangar_call` ≥90s (hold + voter roster)
 
 `source env.sh` sets Hangar URL/key and `ARBITER_MCP_SERVER`. OpenCode config
 lives under `/tmp/arbiter-podman/project` — restart the session after plugin

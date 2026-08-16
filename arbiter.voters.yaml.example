@@ -1,6 +1,6 @@
 # Copy to arbiter.voters.yaml (or set ARBITER_VOTERS_PATH).
-# Explicit provider/model pairs — one OpenAI-compatible adapter for all three.
-# Voter ids MUST match voters[] passed to open_decision.
+# 1..7 OpenAI-compatible voters. Same base_url with different models is fine;
+# ids must be unique and MUST match voters[] passed to open_decision.
 
 voters:
   - id: voter-1

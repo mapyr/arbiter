@@ -27,7 +27,7 @@ returns approve / deny.
 | **L2 plugin (`arbiter-gate`)** | Before `edit` / `bash` / … asks Arbiter for coverage (via Hangar when configured) | Embed local criticality policy |
 | **Hangar** | MCP proxy; holds tools on `approval_list` | Vote by itself |
 | **Arbiter** | Ledger, quorum, coverage, resolve back to Hangar | Give voters repo access |
-| **Voters (3 models)** | JSON allow/deny on a blind evidence bundle | Tools or network beyond chat API |
+| **Voters (1–7 models)** | JSON allow/deny on a blind evidence bundle | Tools or network beyond chat API |
 | **Ledger `ledger.jsonl`** | Append-only event history | In-place “fix” of an old vote |
 
 **Golden rule:** “is this path critical?” lives **only** in Arbiter’s
@@ -60,7 +60,7 @@ flowchart TB
   subgraph arbiter_box [Arbiter]
     COV[check_coverage]
     ADJ[Hold adjudicator]
-    Q[Model quorum — 3 voters]
+    Q[Model quorum — roster]
     LED[(ledger.jsonl)]
     COV --> LED
     ADJ --> LED
@@ -92,7 +92,7 @@ flowchart TB
    (`goal`, `steps`, `scope` — Arbiter formulation applies; no universal
    `**/*`). That runs model quorum and writes a covering allow.
 5. A later `check_coverage` after `ensure_plan` lets the tool through.
-   Coverage itself does **not** call three models on every edit — only plan /
+   Coverage itself does **not** call the voter roster on every edit — only plan /
    hold paths do.
 
 > OpenCode may surface the plugin throw as a generic “Patch failed”. Read the
@@ -120,7 +120,7 @@ Think of a ticket with a closed answer set:
 ```text
 Question: Allow this action?
 Options:  allow | deny
-Voters:   voter-1, voter-2, voter-3   (from arbiter.voters.yaml)
+Voters:   ids from arbiter.voters.yaml (1–7; example uses voter-1..3)
 Scope:    e.g. auth/** , src/**      (what the allow covers)
 ```
 
@@ -129,7 +129,7 @@ Flow:
 1. `open_decision` — ledger row + evidence bundle.
 2. `run_model_quorum` (or automatic on hold / `ensure_plan`):
    - round 1 **blind** — same prompt, no peer votes;
-   - optional round 2 **reveal** — anonymous labels A/B/C.
+   - optional round 2 **reveal** — anonymous labels A, B, … (one per roster slot).
 3. `resolve_decision` — apply the threshold:
    - **critical**: everyone must vote the **same** option;
    - **routine**: everyone votes + strict majority of the roster.

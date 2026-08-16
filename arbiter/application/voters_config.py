@@ -42,8 +42,8 @@ def parse_voters_config(raw: Any) -> VotersConfig:
     if not isinstance(raw, dict):
         raise DomainError("voters config must be a mapping")
     voters_raw = raw.get("voters")
-    if not isinstance(voters_raw, list) or len(voters_raw) != 3:
-        raise DomainError("voters config must declare exactly 3 voters")
+    if not isinstance(voters_raw, list) or not (1 <= len(voters_raw) <= 7):
+        raise DomainError("voters config must declare 1..7 voters")
     seen: set[str] = set()
     voters: list[VoterSpec] = []
     for item in voters_raw:
@@ -95,7 +95,7 @@ def parse_voters_config(raw: Any) -> VotersConfig:
             raise DomainError("baseline_voter must be a non-empty string")
         if baseline not in {v.id for v in voters}:
             raise DomainError(
-                f"baseline_voter {baseline!r} must be one of the three roster ids"
+                f"baseline_voter {baseline!r} must be one of the roster ids"
             )
     return VotersConfig(
         voters=tuple(voters),

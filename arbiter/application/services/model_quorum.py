@@ -172,7 +172,7 @@ class ModelQuorumService:
         return self._finish_resolve(decision_id, latencies, prompts_r1)
 
     def _assign_labels(self, voters: list[str]) -> dict[str, str]:
-        labels = ["A", "B", "C"][: len(voters)]
+        labels = [chr(ord("A") + i) for i in range(len(voters))]
         order = list(voters)
         self.rng.shuffle(order)
         return {lab: vid for lab, vid in zip(labels, order, strict=True)}

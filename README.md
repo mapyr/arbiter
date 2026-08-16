@@ -81,7 +81,7 @@ secrets might land):
 | File | Role |
 |------|------|
 | `arbiter.rules.yaml` | Criticality paths, formulation barriers, `client_gate.plan` |
-| `arbiter.voters.yaml` | Three OpenAI-compatible model voters + shadow/enforce |
+| `arbiter.voters.yaml` | 1–7 OpenAI-compatible voters (repeat providers OK) + shadow/enforce |
 | `arbiter.intercept.yaml` | Which Hangar MCP tools Arbiter adjudicators |
 
 Missing or invalid rules → **everything is critical** (fail-closed).
@@ -124,11 +124,13 @@ Details: [docs/cookbooks/client-layers.md](docs/cookbooks/client-layers.md).
 1. **Round 1 (blind)** — identical prompt to all voters; invalid JSON → one
    retry; then `vote.failed` (no vote).
 2. **Round 2 (reveal)** — only if everyone cast and quorum is still unmet;
-   peers as opaque `A`/`B`/`C`.
+   peers as opaque `A`, `B`, … (one label per roster slot).
 3. Votes go only through `cast_vote`. Resolution uses the highest round.
 
 Copy `arbiter.voters.yaml.example`, set `api_key_env` keys in the environment.
-Ids must match `voters[]` on `open_decision`.
+Ids must match `voters[]` on `open_decision`. Live check (not CI):
+[docs/cookbooks/live-quorum.md](docs/cookbooks/live-quorum.md)
+(`./scripts/live-quorum.sh`).
 
 ## Hangar approval delivery
 

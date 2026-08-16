@@ -12,7 +12,7 @@ Task guides → [`cookbooks/`](./cookbooks/README.md).
 2. [Install (5 minutes)](#2-install-5-minutes)
 3. [Three config files](#3-three-config-files)
 4. [Path A — manual decision (MCP / stdio)](#4-path-a--manual-decision-mcp--stdio)
-5. [Path B — three-model quorum](#5-path-b--three-model-quorum)
+5. [Path B — model quorum](#5-path-b--model-quorum)
 6. [Path C — coverage CLI and plan gate (L2)](#6-path-c--coverage-cli-and-plan-gate-l2)
 7. [Path D — Hangar + hold (preferred stack)](#7-path-d--hangar--hold-preferred-stack)
 8. [Shadow vs enforce](#8-shadow-vs-enforce)
@@ -101,7 +101,7 @@ client_gate:
 - Missing file / parse error → **everything critical** (fail-closed).
 - Clients **do not** copy these rules — they live only here.
 
-### `arbiter.voters.yaml` — three models
+### `arbiter.voters.yaml` — voter roster
 
 ```yaml
 voters:
@@ -112,7 +112,7 @@ voters:
     temperature: 0
     max_tokens: 1200
     timeout_seconds: 45
-  # voter-2, voter-3 — same shape (exactly 3)
+  # voter-2, voter-3, … — same shape (1..7; same provider + different model OK)
 
 round_deadline_seconds: 60
 reveal_round: true
@@ -122,7 +122,7 @@ baseline_voter: voter-1        # single-model reference line (not mixed into quo
 
 API keys go in the env named by `api_key_env`, **not** in YAML.
 
-`voter-*` ids must be **identical** to the `voters` list on `open_decision`.
+YAML `id`s must be **identical** to the `voters` list on `open_decision`.
 
 ### `arbiter.intercept.yaml` — which Hangar tools Arbiter adjudicates
 
@@ -160,7 +160,7 @@ arbiter serve   # stdio — attach an MCP client or use tests
 | `cast_vote` | One vote; key `(decision_id, voter, round)` — no overwrite |
 | `get_decision` | State from ledger replay |
 | `resolve_decision` | Compute quorum (idempotent) |
-| `run_model_quorum` | Three models instead of manual votes |
+| `run_model_quorum` | Roster from YAML instead of manual votes |
 | `check_coverage` | Whether paths are covered by an earlier allow |
 | `get_gate_policy` | Client plan mode + MCP server name |
 
@@ -220,7 +220,10 @@ the paths, and it has not expired.
 
 ---
 
-## 5. Path B — three-model quorum
+## 5. Path B — model quorum
+
+Roster is **1–7** voters from `arbiter.voters.yaml` (unique `id`; same provider
+with different `model` is fine). Examples below use three.
 
 ### 5.1 Keys and config
 
@@ -239,7 +242,7 @@ Endpoints must be **OpenAI-compatible** (`/v1/chat/completions`).
 2. `run_model_quorum` with `{ "decision_id": "…" }`.
 3. Arbiter:
    - **Round 1 (blind)** — same prompt to three; no peer votes.
-   - If quorum unmet and `reveal_round: true` → **round 2** with labels A/B/C.
+   - If quorum unmet and `reveal_round: true` → **round 2** with labels A, B, …
    - Votes only via `cast_vote` (same rules).
 4. Result + latencies `p50_ms` / `p95_ms` in the response.
 
@@ -257,6 +260,21 @@ pytest tests/test_hold_adjudication.py tests/ladder -q
 ```
 
 OpenAI stub in `tests/openai_stub.py` — zero real providers in CI.
+
+### 5.5 Live smoke (three independent providers)
+
+With OpenAI + OpenRouter + Gemini keys:
+
+```bash
+export ARBITER_VOTER_1_KEY='…'
+export ARBITER_VOTER_2_KEY='…'
+export ARBITER_VOTER_3_KEY='…'
+./scripts/live-quorum.sh
+```
+
+Cookbook: [`cookbooks/live-quorum.md`](./cookbooks/live-quorum.md). Missing any
+key exits before HTTP. Hangar/OpenCode demo is a separate path
+([`cookbooks/live-smoke.md`](./cookbooks/live-smoke.md)).
 
 ---
 
@@ -496,7 +514,7 @@ Example ledger events: `decision.opened`, `vote.cast`, `vote.failed`,
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `voters mismatch` | open ids ≠ YAML | Align `voter-1..3` |
+| `voters mismatch` | open ids ≠ YAML | Align `voters[]` with YAML `id`s (1–7) |
 | Everything `critical` | missing / bad rules | Set `ARBITER_RULES_PATH`, fix YAML |
 | HTTP `401` | missing / wrong secret | `X-Arbiter-Secret` = `ARBITER_HTTP_SECRET` |
 | Hangar “noop delivery” | stock image without entry point | Use `./deploy/podman/up.sh` (custom hangar image) |
@@ -529,6 +547,7 @@ Example ledger events: `decision.opened`, `vote.cast`, `vote.failed`,
 |----------|------|
 | [how-it-works.md](./how-it-works.md) | Roles and two gates |
 | [cookbooks/podman.md](./cookbooks/podman.md) | Container demo |
+| [cookbooks/live-quorum.md](./cookbooks/live-quorum.md) | Three live providers, one `ensure-plan` |
 | [cookbooks/live-smoke.md](./cookbooks/live-smoke.md) | Host-process smoke |
 | [cookbooks/client-layers.md](./cookbooks/client-layers.md) | L1/L2/L3 in the client |
 | [cookbooks/formulation.md](./cookbooks/formulation.md) | Scope / options barriers |

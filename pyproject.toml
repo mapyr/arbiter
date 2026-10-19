@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-    "mcp==2.0.0",
+    "mcp==2.2.0",
     "httpx2>=2.10",
     "PyYAML>=6.0",
 ]
